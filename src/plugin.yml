@@ -8,3 +8,11 @@ commands:
   custompotions:
     aliases: [cp]
     description: Allows you to create custom potions using brewing recipes.
+
+permissions:
+  custompotions.reload:
+    default: op
+  custompotions.modify:
+    default: op
+  custompotions.brew:
+    default: true
