@@ -1,5 +1,9 @@
 package custompotions;
 
+import org.apache.commons.lang.StringUtils;
+import org.bukkit.craftbukkit.v1_16_R1.inventory.CraftInventoryAnvil;
+import org.bukkit.potion.PotionData;
+import org.bukkit.potion.PotionType;
 import utilities.AnvilGUI;
 import org.bukkit.*;
 import org.bukkit.command.CommandSender;
@@ -20,25 +24,61 @@ import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitScheduler;
 
 import java.util.*;
 import java.util.logging.Logger;
-
-import static utilities.ColorUtil.chatColorFromColor;
 
 public class main extends JavaPlugin implements Listener {
     private Logger log;
     public data potionData;
     public List<PotionInfo> allCustomPotions;
-    public Inventory inv;
-    AnvilGUI.Builder anvil;
+    public int REDSTAINEDGLASSNUMBER = Integer.MAX_VALUE;
+
+    // TODO two pots cant have same name (includes _ vs space, and is caps insensitive), and no two with same predecessor can have same ingredient
+    //  potentially playing around with lore for potion effects to show the correct potency, and time in day:hour:minute:second if applicable
+    //  maybe in the distant future add presets like splash from existing or whatever
+    //  handle weird gunpowder and dragons breath shenanigans??
+    //  potions having limited potency like dolphins grace, do conditional effect amplifiers on those cases
+    //  uniquely identify clicks to reduce spaghetti
+
+    /*******************************************************************************************************************
+    *                                                      GLOBALS                                                     *
+    ********************************************************************************************************************
+    * Global variables involved in creating a new potion.                                                              *
+    * Type and colour are immediately embedded in the potion ItemStack.                                                *
+    * Effects are added to the potion ItemStack after the relevant significant information is added.                   *
+    * They are temporarily stored in the buffers effectTypeInput, effectDurationInput and effectAmplifierInput.        *
+    * Ingredients and predecessors are added to a list of PotionRecipes once both are added.                           *
+    *******************************************************************************************************************/
+
+    public Inventory inv = null;
     AnvilGUI anvilInv = null;
+    public String effectTypeInput = null;
+    public String effectDurationInput = null; // in seconds
+    public String effectAmplifierInput = null;
+    public Material ingredientInput = null;
+    public List<PotionRecipe> potionRecipesInput = new ArrayList<>();
+    public String potionNameInput = null;
+    boolean isInvOpened = false;
 
-    // TODO have we fixed page thing where if you change to page 3 and then
-    // TODO remove custom colours (dont add potions with funky colours). can get rid of colorutil too. we need a chatColorFromColor using color which will use rgb matching!!!
+    // Called whenever the GUI is exited.
+    public void resetGlobals() {
+        this.inv = null;
+        this.anvilInv = null;
+        this.effectTypeInput = null;
+        this.effectDurationInput = null;
+        this.effectAmplifierInput = null;
+        this.ingredientInput = null;
+        this.potionRecipesInput = new ArrayList<>();
+        this.potionNameInput = null;
+        this.isInvOpened = false;
+    }
 
-    // STARTUP
+    /*******************************************************************************************************************
+    *                                                    ESSENTIALS                                                    *
+    *******************************************************************************************************************/
+
+    // Startup.
     @java.lang.Override
     public void onEnable() {
         this.log = this.getLogger();
@@ -50,26 +90,62 @@ public class main extends JavaPlugin implements Listener {
         this.getServer().getPluginManager().registerEvents(this, this);
         this.getCommand("custompotions").setExecutor(new commands(this));
         this.getCommand("custompotions").setTabCompleter(new tabcomplete(this));
-
     }
 
-    // RELOAD
+    // Reload.
     public void reload() {
         this.potionData.reloadData();
         allCustomPotions = newPotionInfoList();
+        // TODO close inventories
+        resetGlobals();
         this.getCommand("custompotions").setExecutor(new commands(this));
         this.getCommand("custompotions").setTabCompleter(new tabcomplete(this));
     }
 
-    // STOP
+    // Stop.
     @java.lang.Override
     public void onDisable() {
         this.log.info("CustomPotions has been disabled.");
     }
 
-    // DISPLAY PERMISSION DENIED TO CONSOLE
+    // Displaying permission denied to console.
     public void permissionDenied(CommandSender sender) {
         this.log.info(ChatColor.RED + "" + sender.getName() + ChatColor.DARK_RED + " was denied access to command.");
+    }
+
+    /*******************************************************************************************************************
+    *                                                      HELPERS                                                     *
+    *******************************************************************************************************************/
+
+    // Capitalise string and replace delimiter characters with spaces.
+    public String normaliseCapitalise(String string, String delimiter) {
+        String[] all = string.split(delimiter);
+        String normalised = null;
+        for (String s : all) {
+            if (normalised == null) {
+                normalised = "";
+            } else {
+                normalised = normalised.concat(" ");
+            }
+            normalised = normalised.concat(StringUtils.capitalize(s.toLowerCase()));
+        }
+        return normalised;
+    }
+
+    // Given a predecessor potion's metadata, return an appropriate string matching its name
+    public String elementaryName(PotionMeta meta) {
+        switch (meta.getBasePotionData().getType()) {
+            case WATER:
+                return "Water Bottle";
+            case AWKWARD:
+                return "Awkward Potion";
+            case MUNDANE:
+                return "Mundane Potion";
+            case THICK:
+                return "Thick Potion";
+            default:
+                return ChatColor.stripColor(meta.getDisplayName());
+        }
     }
 
     /*******************************************************************************************************************
@@ -93,15 +169,12 @@ public class main extends JavaPlugin implements Listener {
         public String getName() {
             return name;
         }
-
         public int getR() {
             return r;
         }
-
         public int getG() {
             return g;
         }
-
         public int getB() {
             return b;
         }
@@ -131,8 +204,10 @@ public class main extends JavaPlugin implements Listener {
     }
 
     // Given a Colour, return the corresponding ChatColor.
-    public ChatColor chatColorFromColour(Colour colour) {
-        switch (colour.getName()) {
+    public ChatColor chatColorFromColor(Color c) {
+        String name = colourNameFromColor(c) == null ? "none" : colourNameFromColor(c);
+
+        switch (name) {
             case "Red":
                 return ChatColor.RED;
             case "Orange":
@@ -169,70 +244,109 @@ public class main extends JavaPlugin implements Listener {
         }
     }
 
+    public String colourNameFromColor (Color c) {
+        int r = c.getRed();
+        int g = c.getGreen();
+        int b = c.getBlue();
+        String name = null;
+
+        for (Colour h : newColourList()) {
+            if (h.getR() == r && h.getG() == g && h.getB() == b) {
+                name = h.getName();
+                break;
+            }
+        }
+        return name;
+    }
+
+    // Using values from potion.yml, determine if a colour is valid.
+    public boolean isValidColour(String name, int r, int g, int b) {
+        for (Colour h : newColourList()) {
+            if (h.getR() == r && h.getG() == g && h.getB() == b && h.getName().equals(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /*******************************************************************************************************************
     *                                                 POTION MANAGEMENT                                                *
     *******************************************************************************************************************/
+
+    // PotionRecipe class.
+    public static class PotionRecipe {
+        ItemStack predecessor;
+        Material ingredient;
+
+        public PotionRecipe(ItemStack predecessor, Material ingredient) {
+            this.predecessor = predecessor;
+            this.ingredient = ingredient;
+        }
+    }
 
     // PotionInfo class.
     public static class PotionInfo {
         public String name;
         public Material type;
-        public Material ingredient;
-        public ItemStack predecessor;
+        public List<PotionRecipe> potionrecipes;
         public Colour colour;
         public ItemStack itemstack;
     }
 
-    // Returns list of a data-type containing information about all custom potions.
-    // TODO maybe make this call a thing which makes a single PotionInfo so we can call when adding new one
+    // Returns a data-type containing all information regarding a custom potion.
+    public PotionInfo newPotionInfo(FileConfiguration fileInput, String s) {
+        PotionInfo pc = new PotionInfo();
+
+        // Name (String).
+        pc.name = s;
+
+        // Type (Material).
+        pc.type = helperType(fileInput, s);
+        if (pc.type == null) return null;
+
+        // ItemStack (ItemStack).
+        ItemStack potionItemStack = new ItemStack(pc.type);
+        PotionMeta potionMeta = (PotionMeta) potionItemStack.getItemMeta();
+
+        potionMeta.setDisplayName(ChatColor.RESET + s);
+
+        // Colour (Colour) - handles potionMeta.
+        pc.colour = helperColour(fileInput, s, potionMeta);
+        if (pc.colour == null) return null;
+
+        // Effects (List<PotionEffect>).
+        if (fileInput.getString(s + ".effects") != null && fileInput.getString(s + ".effects").equalsIgnoreCase("none")) {
+
+        } else if (helperEffects(fileInput.getConfigurationSection(s + ".effects"), s, potionMeta,
+                pc.type == Material.LINGERING_POTION) == null) {
+            return null;
+        }
+
+        // Predecessor (ItemStack).
+        pc.potionrecipes = helperPredecessor(fileInput, s);
+        if (pc.potionrecipes == null) return null;
+
+        // ItemStack (ItemStack).
+        potionItemStack.setItemMeta(potionMeta);
+        pc.itemstack = potionItemStack;
+        this.log.info("Successfully added " + s + " to the game.");
+
+        return pc;
+    }
+
+    // Returns list of all custom potions loaded from memory.
     public List<PotionInfo> newPotionInfoList() {
         FileConfiguration fileInput = potionData.getData();
         Set<String> names = fileInput.getKeys(false);
         List<PotionInfo> pcList = new ArrayList<PotionInfo>();
+
         for (String s : names) {
-            PotionInfo pc = new PotionInfo();
-
-            // Name (String).
-            pc.name = s;
-
-            // Type (Material).
-            pc.type = helperType(fileInput, s);
-            if (pc.type == null) continue;
-
-            // ItemStack (ItemStack).
-            ItemStack potionItemStack = new ItemStack(pc.type);
-            PotionMeta potionMeta = (PotionMeta) potionItemStack.getItemMeta();
-            if (potionMeta == null) {
-                this.log.severe("Unknown error. Skipping the potion.");
-                continue;
-            }
-            potionMeta.setDisplayName(ChatColor.RESET + s);
-
-            // Colour (Colour) - handles potionMeta.
-            pc.colour = helperColour(fileInput, s, potionMeta);
-            if (pc.colour == null) continue;
-
-            // Effects (List<PotionEffect>).
-            if (helperEffects(fileInput.getConfigurationSection(s + ".effects"), s, potionMeta) == null) continue;
-
-            // Ingredient (Material).
-            pc.ingredient = helperIngredient(fileInput, s);
-            if (pc.ingredient == null) continue;
-
-            // Predecessor (ItemStack).
-            pc.predecessor = helperPredecessor(fileInput, s);
-            if (pc.predecessor == null) continue;
-
-            // ItemStack (ItemStack).
-            potionItemStack.setItemMeta(potionMeta);
-            pc.itemstack = potionItemStack;
-            pcList.add(pc);
-            this.log.info("Successfully added " + s + " to the game.");
+            PotionInfo add = newPotionInfo(fileInput, s);
+            if (add == null) continue;
+            pcList.add(add);
         }
         return pcList;
     }
-
-
 
     // Helper to get (from file) and set the type of a potion.
     public Material helperType(FileConfiguration fileInput, String s) {
@@ -264,8 +378,8 @@ public class main extends JavaPlugin implements Listener {
                 redI = Integer.parseInt(redS);
                 greenI = Integer.parseInt(greenS);
                 blueI = Integer.parseInt(blueS);
-                if (redI < 0 || redI > 255 || greenI < 0 || greenI > 255 || blueI < 0 || blueI > 255) {
-                    this.log.warning(s + " has an invalid RGB value(s). Must be an integer from 0 to 255 inclusive. Skipping the potion.");
+                if (!isValidColour(colourName, redI, greenI, blueI)) {
+                    this.log.warning(s + " does not have a valid colour with name and/or RGB values matching database values. Skipping the potion.");
                     return null;
                 }
                 potionMeta.setColor(Color.fromRGB(redI, greenI, blueI));
@@ -278,8 +392,9 @@ public class main extends JavaPlugin implements Listener {
     }
 
     // Helper to get (from file) and set the effects of a potion, as well as its corresponding metadata information.
-    public List<PotionEffect> helperEffects(ConfigurationSection fx, String s, PotionMeta potionMeta) {
+    public List<PotionEffect> helperEffects(ConfigurationSection fx, String s, PotionMeta potionMeta, boolean isLingering) {
         List<PotionEffect> potionEffects = new ArrayList<>();
+
         if (fx == null) {
             this.log.info(s + " does not have any valid effects. Continuing with the potion.");
             return potionEffects;
@@ -288,7 +403,6 @@ public class main extends JavaPlugin implements Listener {
         Set<String> effects = fx.getKeys(false);
         for (String effect : effects) {
             if (effect.equalsIgnoreCase("none")) {
-                // this.log.info(s + " does not have any valid effects. Continuing with the potion.");
                 return potionEffects;
             }
             PotionEffectType effectType = PotionEffectType.getByName(effect);
@@ -323,6 +437,8 @@ public class main extends JavaPlugin implements Listener {
                 continue;
             }
 
+            durationI = (isLingering) ? 80 * durationI : 20 * durationI;
+
             PotionEffect pe = new PotionEffect(effectType, durationI, amplifierI);
             potionEffects.add(pe);
             potionMeta.addCustomEffect(pe, false);
@@ -331,218 +447,248 @@ public class main extends JavaPlugin implements Listener {
         return potionEffects;
     }
 
-    // Helper to get (from file) and set the ingredient of a potion.
-    public Material helperIngredient(FileConfiguration fileInput, String s) {
-        String ingredient = fileInput.getString(s + ".ingredient");
+    // Helper to get (from file) the information of an ingredient.
+    public Material helperIngredient(FileConfiguration fileInput, String s, String predecessor) {
+        String ingredient = fileInput.getString(s + ".predecessors." + predecessor + ".ingredient");
         if (ingredient == null) {
-            this.log.warning(s + " does not have an ingredient. Skipping.");
+            this.log.warning(s + " does not have a valid ingredient for predecessor " + predecessor + ". Skipping.");
             return null;
         }
         Material match = Material.matchMaterial(ingredient);
         if (match == null) {
-            this.log.warning(ingredient + " is not a valid ingredient for " + s + ". Skipping the potion.");
+            this.log.warning(ingredient + " is not a valid ingredient for predecessor " + predecessor + " of " + s + ". Skipping the potion.");
             return null;
         }
         return match;
     }
 
     // Helper to get (from file) the information of a predecessor.
-    public ItemStack helperPredecessor(FileConfiguration fileInput, String s) {
-        String preType = fileInput.getString(s + ".predecessor.type");
-        if (preType == null) {
-            this.log.warning(s + " does not have a valid predecessor type. Skipping the potion.");
+    public List<PotionRecipe> helperPredecessor(FileConfiguration fileInput, String s) {
+        List<PotionRecipe> potionRecipes = new ArrayList<>();
+        ConfigurationSection pCS = fileInput.getConfigurationSection(s + ".predecessors");
+        if (pCS == null) {
+            this.log.warning(s + " does not have any valid predecessors. Skipping the potion.");
             return null;
         }
-        Material match = Material.matchMaterial(preType);
-        if (match == null) {
-            this.log.warning(preType + " is not a valid predecessor type for " + s + ". Skipping the potion.");
-            return null;
-        }
-        ItemStack item = new ItemStack(match);
-        String name = fileInput.getString(s + ".predecessor.name");
-        if (name == null) {
-            this.log.warning(s + " does not have a valid predecessor name. Skipping the potion.");
-            return null;
-        }
-
-        if (match == Material.POTION || match == Material.LINGERING_POTION || match == Material.SPLASH_POTION) {
-            PotionMeta meta = (PotionMeta) item.getItemMeta();
-            meta.setDisplayName(ChatColor.RESET + name);
-            if (helperEffects(fileInput.getConfigurationSection(s + ".predecessor.effects"), s + "'s predecessor", meta) == null) // TODO why is this bugging out
+        Set<String> ps = pCS.getKeys(false);
+        for (String preName : ps) {
+            boolean potionExists = false;
+            for (String name : fileInput.getKeys(false)) {
+                if (name.equals(preName)) potionExists = true;
+            }
+            if (!potionExists) {
+                this.log.warning(s + " has a predecessor which does not exist. Skipping the potion.");
                 return null;
-            item.setItemMeta(meta);
+            }
+            // TODO need to check if the effects are the same, + add the 4 types of special water potions
+            //  may be a little difficult since it's hard to know whether or not that potion is valid or not. how can we solve this?
+            // TODO checking if two predecessors have same ingredient
+            String preType = pCS.getString(preName + ".type");
+            if (preType == null) {
+                this.log.warning(s + " does not have a valid type for predecessor " + preName + ". Skipping the potion.");
+                return null;
+            }
+            Material match = Material.matchMaterial(preType);
+            if (match == null) {
+                this.log.warning(preType + " is not a valid type for predecessor " + preName + " of potion " + s + ". Skipping the potion.");
+                return null;
+            } else if (match != Material.POTION && match != Material.SPLASH_POTION && match != Material.LINGERING_POTION) {
+                this.log.warning(preType + " is not a valid type for predecessor " + preName + " of potion " + s + "." +
+                        " Must be POTION, SPLASH_POTION or LINGERING_POTION. Skipping the potion.");
+                return null;
+            }
+            ItemStack predecessor = new ItemStack(match);
+
+            PotionMeta meta = (PotionMeta) predecessor.getItemMeta();
+            meta.setDisplayName(ChatColor.RESET + preName);
+            if (pCS.getString(preName + ".effects") != null && pCS.getString(preName + ".effects").equalsIgnoreCase("none")) {
+
+            } else if (helperEffects(pCS.getConfigurationSection(preName + ".effects"), s + "'s predecessor " + preName, meta,
+                    match == Material.LINGERING_POTION) == null) {
+                return null;
+            }
+            predecessor.setItemMeta(meta);
+
+            /*if (match == Material.POTION || match == Material.LINGERING_POTION || match == Material.SPLASH_POTION) {
+                PotionMeta meta = (PotionMeta) predecessor.getItemMeta();
+                meta.setDisplayName(ChatColor.RESET + preName);
+                if (helperEffects(pCS.getConfigurationSection(preName + ".effects"), s + "'s predecessor " + preName, meta) == null)
+                    return null;
+                predecessor.setItemMeta(meta);
+            } else {
+                ItemMeta meta = predecessor.getItemMeta();
+                meta.setDisplayName(ChatColor.RESET + preName);
+                predecessor.setItemMeta(meta);
+            }*/
+
+            Material ingredient = helperIngredient(fileInput, s, preName);
+            if (ingredient == null) return null;
+
+            potionRecipes.add(new PotionRecipe(predecessor, ingredient));
+        }
+        return potionRecipes;
+    }
+
+    // 0             1          2        3          4          5          6
+    // custompotions click-page type/not colour/not effect/not recipe/not name/not
+
+    // Methods using localized names.
+    public String  newLocalized(boolean fromMemory) {
+        if (!fromMemory) {
+            return "custompotions select-0 not not not not not";
         } else {
-            ItemMeta meta = item.getItemMeta();
-            meta.setDisplayName(ChatColor.RESET + name);
-            item.setItemMeta(meta);
-        }
-
-        return item;
-    }
-
-    // When something in potion creation GUI is clicked, this class will be used.
-    private static class PotionClick implements Cloneable {
-        private String click; // exit, select, type, colour, effect_type, effect_dur, effect_amp, ingredient, predecessor, name
-        private int page; // 0 if a not a page indicator, otherwise will be the page to go to
-        private boolean type;
-        private boolean colour;
-        private boolean effect_type;
-        private boolean effect_dur;
-        private boolean effect_amp;
-        private boolean ingredient;
-        private boolean predecessor;
-        private boolean name;
-
-        // Initializer constructor for when command is issued.
-        public PotionClick(boolean fromMemory) {
-            this.click = "select";
-            this.page = 0;
-            this.type = this.colour = this.effect_type = this.effect_dur = this.effect_amp = this.ingredient = this.predecessor = this.name = fromMemory;
-        }
-
-        // Constructor using localized name.
-        // 0             1          2        3          4               5              6              7              8               9
-        // custompotions click-page type/not colour/not effect_type/not effect_dur/not effect_amp/not ingredient/not predecessor/not name/not
-        public PotionClick(String s) {
-            String[] all = s.split(" ");
-            this.click = all[1].split("-")[0];
-            this.page = Integer.parseInt(all[1].split("-")[1]);
-            this.type = all[2].equalsIgnoreCase("type");
-            this.colour = all[3].equalsIgnoreCase("colour");
-            this.effect_type = all[4].equalsIgnoreCase("effect_type");
-            this.effect_dur = all[5].equalsIgnoreCase("effect_dur");
-            this.effect_amp = all[6].equalsIgnoreCase("effect_amp");
-            this.ingredient = all[7].equalsIgnoreCase("ingredient");
-            this.predecessor = all[8].equalsIgnoreCase("predecessor");
-            this.name = all[9].equalsIgnoreCase("name");
-        }
-
-        // Simple methods.
-        public PotionClick clone() throws CloneNotSupportedException {
-            return (PotionClick) super.clone();
-        }
-        public String getClick() {
-            return click;
-        }
-        public int getPage() {
-            return page;
-        }
-        public boolean hasType() {
-            return type;
-        }
-        public boolean hasColour() {
-            return colour;
-        }
-        public boolean hasEffectType() {
-            return effect_type;
-        }
-        public boolean hasEffectDur() {
-            return effect_dur;
-        }
-        public boolean hasEffectAmp() {
-            return effect_amp;
-        }
-        public boolean hasIngredient() {
-            return ingredient;
-        }
-        public boolean hasPredecessor() {
-            return predecessor;
-        }
-        public boolean hasName() {
-            return name;
-        }
-        public boolean isComplete() {
-            return type && colour && effect_type && effect_dur && effect_amp && ingredient && predecessor && name;
-        }
-        public void setClick(String click) {
-            this.click = click;
-        }
-        public void setPage(int page) {
-            this.page = page;
-        }
-        public void setType(boolean type) {
-            this.type = type;
-        }
-        public void setColour(boolean colour) {
-            this.colour = colour;
-        }
-        public void setEffectType(boolean effect_type) {
-            this.effect_type = effect_type;
-        }
-        public void setEffectDur(boolean effect_dur) {
-            this.effect_dur = effect_dur;
-        }
-        public void setEffectAmp(boolean effect_amp) {
-            this.effect_amp = effect_amp;
-        }
-        public void setIngredient(boolean ingredient) {
-            this.ingredient = ingredient;
-        }
-        public void setPredecessor(boolean predecessor) {
-            this.predecessor = predecessor;
-        }
-        public void setName(boolean name) {
-            this.name = name;
-        }
-
-        // Provided with a PotionClick, create a localized name.
-        public String localizedNameFromPotionClick() {
-            String s = ("custompotions " + click + "-" + String.valueOf(page));
-            s = type ? s.concat(" type") : s.concat(" not");
-            s = colour ? s.concat(" colour") : s.concat(" not");
-            s = effect_type ? s.concat(" effect_type") : s.concat(" not");
-            s = effect_dur ? s.concat(" effect_dur") : s.concat(" not");
-            s = effect_amp ? s.concat(" effect_amp") : s.concat(" not");
-            s = ingredient ? s.concat(" ingredient") : s.concat(" not");
-            s = predecessor ? s.concat(" predecessor") : s.concat(" not");
-            s = name ? s.concat(" name") : s.concat(" not");
-            return s;
+            return "custompotions select-0 type colour effect recipe name";
         }
     }
-
-    // Returns true if an item involving CustomPotions GUI is clicked.
-    public boolean isPotionClick(String s) {
-        return s.split(" ")[0].equalsIgnoreCase("custompotions");
+    public boolean isPotionClick(String localized) {
+        return localized.split(" ")[0].equalsIgnoreCase("custompotions");
+    }
+    public boolean isCompletePotion(String localized) {
+        for (String s : localized.split(" ")) {
+            if (s.equalsIgnoreCase("not")) {
+                return false;
+            }
+        }
+        return true;
+    }
+    public String  getClick(String localized) {
+        return localized.split(" ")[1].split("-")[0];
+    }
+    public int     getPage(String localized) {
+        return Integer.parseInt(localized.split(" ")[1].split("-")[1]);
+    }
+    public boolean hasType(String localized) {
+        return localized.split(" ")[2].equalsIgnoreCase("type");
+    }
+    public boolean hasColour(String localized) {
+        return localized.split(" ")[3].equalsIgnoreCase("colour");
+    }
+    public boolean hasEffect(String localized) {
+        return localized.split(" ")[4].equalsIgnoreCase("effect");
+    }
+    public boolean hasRecipe(String localized) {
+        return localized.split(" ")[5].equalsIgnoreCase("recipe");
+    }
+    public boolean hasName(String localized) {
+        return localized.split(" ")[6].equalsIgnoreCase("name");
+    }
+    public String setClick(String localized, String click) {
+        String[] all = localized.split(" ");
+        String newLocalized = "custompotions " + click + "-" + all[1].split("-")[1];
+        for (int i = 2; i < 7; i++) {
+            newLocalized = newLocalized.concat(" " + all[i]);
+        }
+        return newLocalized;
+    }
+    public String setPage(String localized, int page) {
+        String[] all = localized.split(" ");
+        String newLocalized = "custompotions " + all[1].split("-")[0] + "-" + page;
+        for (int i = 2; i < 7; i++) {
+            newLocalized = newLocalized.concat(" " + all[i]);
+        }
+        return newLocalized;
+    }
+    public String setType(String localized, boolean type) {
+        String[] all = localized.split(" ");
+        String newLocalized = "custompotions";
+        for (int i = 1; i < 2; i++) {
+            newLocalized = newLocalized.concat(" " + all[i]);
+        }
+        newLocalized = type ? newLocalized.concat(" type") : newLocalized.concat(" not");
+        for (int i = 3; i < 7; i++) {
+            newLocalized = newLocalized.concat(" " + all[i]);
+        }
+        return newLocalized;
+    }
+    public String setColour(String localized, boolean colour) {
+        String[] all = localized.split(" ");
+        String newLocalized = "custompotions";
+        for (int i = 1; i < 3; i++) {
+            newLocalized = newLocalized.concat(" " + all[i]);
+        }
+        newLocalized = colour ? newLocalized.concat(" colour") : newLocalized.concat(" not");
+        for (int i = 4; i < 7; i++) {
+            newLocalized = newLocalized.concat(" " + all[i]);
+        }
+        return newLocalized;
+    }
+    public String setEffect(String localized, boolean effect) {
+        String[] all = localized.split(" ");
+        String newLocalized = "custompotions";
+        for (int i = 1; i < 4; i++) {
+            newLocalized = newLocalized.concat(" " + all[i]);
+        }
+        newLocalized = effect ? newLocalized.concat(" effect") : newLocalized.concat(" not");
+        for (int i = 5; i < 7; i++) {
+            newLocalized = newLocalized.concat(" " + all[i]);
+        }
+        return newLocalized;
+    }
+    public String setRecipe(String localized, boolean recipe) {
+        String[] all = localized.split(" ");
+        String newLocalized = "custompotions";
+        for (int i = 1; i < 5; i++) {
+            newLocalized = newLocalized.concat(" " + all[i]);
+        }
+        newLocalized = recipe ? newLocalized.concat(" recipe") : newLocalized.concat(" not");
+        for (int i = 6; i < 7; i++) {
+            newLocalized = newLocalized.concat(" " + all[i]);
+        }
+        return newLocalized;
+    }
+    public String setName(String localized, boolean name) {
+        String[] all = localized.split(" ");
+        String newLocalized = "custompotions";
+        for (int i = 1; i < 6; i++) {
+            newLocalized = newLocalized.concat(" " + all[i]);
+        }
+        newLocalized = name ? newLocalized.concat(" name") : newLocalized.concat(" not");
+        return newLocalized;
     }
 
     // Returns ItemStack with all information added.
-    public ItemStack newItemStackGUI(ItemStack item, PotionClick pc) throws CloneNotSupportedException {
+    public ItemStack newItemStackGUI(ItemStack item, String localized) {
         ItemMeta meta = item.getItemMeta();
         List<String> lore = new ArrayList<>();
-        if (pc.getClick().equalsIgnoreCase("exit")) {
-            meta.setDisplayName(ChatColor.RED + "EXIT");
+        if (getClick(localized).equalsIgnoreCase("exit")) {
             if (item.getType() == Material.BARRIER) {
-                lore.add(ChatColor.RED + "Click to exit without saving.");
-            } else if (pc.isComplete()) {
+                meta.setDisplayName(ChatColor.RED + "EXIT");
+                lore.add(ChatColor.RED + "Click to exit.");
+            } else if (isCompletePotion(localized)) {
+                meta.setDisplayName(chatColorFromColor(((PotionMeta) meta).getColor()) + potionNameInput);
+                lore.add("");
                 lore.add(ChatColor.GOLD + "This is your current potion.");
-                lore.add(ChatColor.GREEN + "Left click to save and exit.");
+                lore.add(ChatColor.GREEN + "Left click to save your changes and exit.");
                 lore.add(ChatColor.RED + "Right click to exit without saving.");
             } else {
+                meta.setDisplayName(chatColorFromColor(((PotionMeta) meta).getColor()) + potionNameInput);
+                lore.add("");
                 lore.add(ChatColor.GOLD + "This is your current potion.");
                 lore.add(ChatColor.RED + "Click to exit without saving.");
             }
             meta.setLore(lore);
-            meta.setLocalizedName(pc.localizedNameFromPotionClick());
         }
-        switch (item.getType()) {
-            case RED_STAINED_GLASS_PANE:
-                meta.setDisplayName(ChatColor.RED + "NO PAGE TO GO TO");
-            default:
-                break;
+        meta.setLocalizedName(localized);
+        if (item.getType() == Material.RED_STAINED_GLASS_PANE) {
+            meta.setDisplayName(ChatColor.RED + "NO PAGE TO GO TO");
+            meta.setLocalizedName(setPage(localized, REDSTAINEDGLASSNUMBER));
         }
-        meta.setLocalizedName(pc.localizedNameFromPotionClick());
         item.setItemMeta(meta);
-        // TODO maybe add lore in the future when add lore for page numbers, predecessor, ingredient all from a glance
         return item;
     }
 
     /*******************************************************************************************************************
-     *                                                     COMMANDS                                                     *
-     *******************************************************************************************************************/
+    *                                                     COMMANDS                                                     *
+    *******************************************************************************************************************/
 
     // Create and modify custom potions.
     // "modify"
-    public boolean modifyPotions(CommandSender sender) throws CloneNotSupportedException {
+    public boolean modifyPotions(CommandSender sender) {
+        this.isInvOpened = true;
+        /*if (isInvOpened) {
+            sender.sendMessage(ChatColor.RED + "Potion management is currently being undertaken by another user.");
+            return true;
+        }*/
         if (sender instanceof Player) {
             return playerModifyPotions((Player) sender, null, null);
         } else {
@@ -551,63 +697,41 @@ public class main extends JavaPlugin implements Listener {
     }
 
     // Modifying potions with GUI for players.
-    public boolean playerModifyPotions(Player player, ItemStack existingPotion, ItemStack clicked) throws CloneNotSupportedException {
-        // previousClick is the item that was just clicked.
-        PotionClick previousClick;
+    public boolean playerModifyPotions(Player player, ItemStack existingPotion, ItemStack clicked) {
+        // previousClick is the info contained in the item that was just clicked.
+        String previousClick;
         List<String> lore;
         if (clicked == null && existingPotion == null) {
-            previousClick = new PotionClick(true);
+            previousClick = newLocalized(true);
         } else {
-            previousClick = new PotionClick(clicked.getItemMeta().getLocalizedName());
+            previousClick = clicked.getItemMeta().getLocalizedName();
         }
-        String click = previousClick.getClick();
-        if (click.equalsIgnoreCase("select") && previousClick.getPage() == 0) {
-            previousClick = new PotionClick(true);
+
+        // If returning to the main menu, potions from memory should be relabelled as complete.
+        String click = getClick(previousClick);
+        if (click.equalsIgnoreCase("select") && getPage(previousClick) == 0) {
+            previousClick = newLocalized(true);
         }
 
         // currentClick is what all the new items will display.
-        PotionClick currentClick = previousClick.clone();
+        String currentClick = previousClick;
 
-        // menus: select, type colour, effect type, effect duration, effect amplifier, ingredient, predecessor, name
+        // menus: select, type, colour, effect type, effect duration, effect amplifier, ingredient, predecessor, name
         switch (click) {
             case "select": {
                 inv = Bukkit.createInventory(null, 54, ChatColor.GOLD + "Select a Potion to Modify");
-                currentClick.setClick("type");
-                currentClick.setPage(0);
                 int numPotions = 0;
-                int pageNumToDisplay = previousClick.getPage();
+                int pageNumToDisplay = getPage(previousClick);
                 int totalPotions = 1 + allCustomPotions.size();
                 int PAGESIZE = 51;
                 boolean needsNextPage = (totalPotions - PAGESIZE * pageNumToDisplay) > PAGESIZE;
 
-                // EXIT, slot 53.
-                currentClick.setClick("exit");
-                ItemStack barrier = new ItemStack(Material.BARRIER);
-                barrier = newItemStackGUI(barrier, currentClick);
-                inv.setItem(53, barrier);
-
-                // NEXT PAGE, slot 44.
-                currentClick.setClick("select");
-                ItemStack next = needsNextPage ? new ItemStack(Material.LIME_STAINED_GLASS_PANE) : new ItemStack(Material.RED_STAINED_GLASS_PANE);
-                currentClick.setPage(needsNextPage ? pageNumToDisplay + 1 : 0);
-                ItemMeta nextMeta = next.getItemMeta();
-                nextMeta.setDisplayName(ChatColor.GREEN + "NEXT PAGE");
-                nextMeta.setLocalizedName(currentClick.localizedNameFromPotionClick());
-                if (needsNextPage) {
-                    lore = new ArrayList<>();
-                    lore.add(ChatColor.GREEN + "Page " + (pageNumToDisplay + 1));
-                    nextMeta.setLore(lore);
-                }
-                next.setItemMeta(nextMeta);
-                next = newItemStackGUI(next, currentClick);
-                inv.setItem(44, next);
-
                 // PREVIOUS PAGE, slot 35.
                 ItemStack previous = pageNumToDisplay != 0 ? new ItemStack(Material.ORANGE_STAINED_GLASS_PANE) : new ItemStack(Material.RED_STAINED_GLASS_PANE);
-                currentClick.setPage(pageNumToDisplay != 0 ? pageNumToDisplay - 1 : 0);
+                currentClick = setClick(previousClick,"select");
+                currentClick = setPage(currentClick, pageNumToDisplay != 0 ? pageNumToDisplay - 1 : REDSTAINEDGLASSNUMBER);
                 ItemMeta prevMeta = previous.getItemMeta();
                 prevMeta.setDisplayName(ChatColor.GOLD + "PREVIOUS PAGE");
-                prevMeta.setLocalizedName(currentClick.localizedNameFromPotionClick());
                 if (pageNumToDisplay != 0) {
                     lore = new ArrayList<>();
                     lore.add(ChatColor.GOLD + "Page " + (pageNumToDisplay - 1));
@@ -617,21 +741,41 @@ public class main extends JavaPlugin implements Listener {
                 previous = newItemStackGUI(previous, currentClick);
                 inv.setItem(35, previous);
 
+                // NEXT PAGE, slot 44.
+                ItemStack next = needsNextPage ? new ItemStack(Material.LIME_STAINED_GLASS_PANE) : new ItemStack(Material.RED_STAINED_GLASS_PANE);
+                ItemMeta nextMeta = next.getItemMeta();
+                currentClick = setClick(previousClick,"select");
+                currentClick = setPage(currentClick, needsNextPage ? pageNumToDisplay + 1 : REDSTAINEDGLASSNUMBER);
+                nextMeta.setDisplayName(ChatColor.GREEN + "NEXT PAGE");
+                if (needsNextPage) {
+                    lore = new ArrayList<>();
+                    lore.add(ChatColor.GREEN + "Page " + (pageNumToDisplay + 1));
+                    nextMeta.setLore(lore);
+                }
+                next.setItemMeta(nextMeta);
+                next = newItemStackGUI(next, currentClick);
+                inv.setItem(44, next);
+
+                // EXIT, slot 53.
+                ItemStack barrier = new ItemStack(Material.BARRIER);
+                barrier = newItemStackGUI(barrier, setClick(previousClick, "exit"));
+                inv.setItem(53, barrier);
+
                 // New potion.
-                currentClick.setClick("type");
-                currentClick.setPage(0);
+                currentClick = setClick(previousClick, "type");
+                currentClick = setPage(currentClick, 0); // for all the potions
                 List<Colour> colourList = newColourList();
                 if (pageNumToDisplay == 0) {
                     ItemStack potionItemStack = new ItemStack(Material.POTION);
-                    PotionClick newClick = new PotionClick(false);
-                    newClick.setClick("type");
+                    String newClick = newLocalized(false);
+                    newClick = setClick(newClick, "type");
                     PotionMeta meta = (PotionMeta) potionItemStack.getItemMeta();
-                    Colour h = colourList.get((new Random()).nextInt(17));
-                    Color k = Color.fromRGB(h.getR(), h.getG(), h.getB());
-                    meta.setColor(k);
-                    meta.setDisplayName(chatColorFromColour(h) + "Create New Potion");
+                    Colour randomColour = colourList.get((new Random()).nextInt(17));
+                    Color randomColor = Color.fromRGB(randomColour.getR(), randomColour.getG(), randomColour.getB());
+                    meta.setColor(randomColor);
+                    meta.setDisplayName(chatColorFromColor(randomColor) + "New Potion");
                     lore = new ArrayList<>();
-                    lore.add(ChatColor.GOLD + "Create a custom potion from scratch.");
+                    lore.add(ChatColor.GOLD + "Create a new custom potion from scratch.");
 
                     meta.setLore(lore);
                     potionItemStack.setItemMeta(meta);
@@ -649,9 +793,15 @@ public class main extends JavaPlugin implements Listener {
                     ItemStack potionItemStack = pi.itemstack.clone();
                     PotionMeta meta = (PotionMeta) potionItemStack.getItemMeta();
                     lore = new ArrayList<>();
-                    lore.add(ChatColor.GOLD + "ALL INFORMATION GOES HERE.");
+                    lore.add("");
+                    lore.add(ChatColor.DARK_PURPLE + "Recipes:");
+                    for (PotionRecipe pr : pi.potionrecipes) {
+                        lore.add(ChatColor.GOLD + normaliseCapitalise(pr.ingredient.name(), "_") + " + "
+                                + pr.predecessor.getItemMeta().getDisplayName() + " (" +
+                                normaliseCapitalise(pr.predecessor.getType().name(), "_") + ")");
+                    }
                     meta.setLore(lore);
-                    meta.setDisplayName(chatColorFromColour(pi.colour) != null ? chatColorFromColour(pi.colour) + meta.getDisplayName() : chatColorFromColor(meta.getColor()) + meta.getDisplayName());
+                    meta.setDisplayName(chatColorFromColor(meta.getColor()) + meta.getDisplayName());
                     potionItemStack.setItemMeta(meta);
                     potionItemStack = newItemStackGUI(potionItemStack, currentClick);
                     inv.addItem(potionItemStack);
@@ -666,11 +816,9 @@ public class main extends JavaPlugin implements Listener {
             }
             case "type": {
                 inv = Bukkit.createInventory(null, 54, ChatColor.GOLD + "Select a Potion Type");
-                PotionClick specialCLick = currentClick.clone();
-                specialCLick.setPage(0); // UNIVERSAL
-                currentClick.setClick("colour");
-                currentClick.setPage(0);
-                currentClick.setType(true);
+                currentClick = setClick(currentClick, "colour");
+                currentClick = setPage(currentClick, 0);
+                currentClick = setType(currentClick, true);
 
                 ItemStack potionItemStack = new ItemStack(Material.POTION);
                 PotionMeta meta = (PotionMeta) existingPotion.getItemMeta();
@@ -696,105 +844,96 @@ public class main extends JavaPlugin implements Listener {
                 potionItemStack = newItemStackGUI(potionItemStack, currentClick);
                 inv.addItem(potionItemStack);
 
-                // EXIT, slot 53.
-                specialCLick.setClick("exit");
-                ItemStack currentPotion = existingPotion.clone();
-                currentPotion = newItemStackGUI(currentPotion, specialCLick);
-                inv.setItem(53, currentPotion);
+                currentClick = setType(currentClick, hasType(previousClick));
 
-                // NEXT MENU, slot 52.
-                specialCLick.setClick("colour");
-                ItemStack right = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
-                ItemMeta rightMeta = right.getItemMeta();
-                rightMeta.setDisplayName(ChatColor.GREEN + "NEXT MENU");
-                rightMeta.setLocalizedName(specialCLick.localizedNameFromPotionClick());
-                lore = new ArrayList<>();
-                lore.add(ChatColor.GREEN + "Colour Selection");
-                rightMeta.setLore(lore);
-                right.setItemMeta(rightMeta);
-                right = newItemStackGUI(right, specialCLick);
-                inv.setItem(52, right);
+                // PREVIOUS PAGE, slot 35.
+                ItemStack previous = new ItemStack(Material.RED_STAINED_GLASS_PANE);
+                previous = newItemStackGUI(previous, currentClick);
+                inv.setItem(35, previous);
+
+                // NEXT PAGE, slot 44.
+                ItemStack next = new ItemStack(Material.RED_STAINED_GLASS_PANE);
+                next = newItemStackGUI(next, currentClick);
+                inv.setItem(44, next);
 
                 // PREVIOUS MENU, slot 51.
-                specialCLick.setClick("select");
+                currentClick = setClick(currentClick, "select");
                 ItemStack left = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
                 ItemMeta leftMeta = left.getItemMeta();
                 leftMeta.setDisplayName(ChatColor.GOLD + "PREVIOUS MENU");
-                leftMeta.setLocalizedName(specialCLick.localizedNameFromPotionClick());
                 lore = new ArrayList<>();
                 lore.add(ChatColor.GOLD + "Potion Selection");
                 lore.add(ChatColor.RED + "Warning: you will lose your unsaved changes!");
                 lore.add(ChatColor.RED + "Save a completed potion to validate your changes.");
                 leftMeta.setLore(lore);
                 left.setItemMeta(leftMeta);
-                left = newItemStackGUI(left, specialCLick);
+                left = newItemStackGUI(left, currentClick);
                 inv.setItem(51, left);
 
-                // NEXT PAGE, slot 44.
-                specialCLick.setClick("type");
-                ItemStack next = new ItemStack(Material.RED_STAINED_GLASS_PANE);
-                next = newItemStackGUI(next, specialCLick);
-                inv.setItem(44, next);
+                // NEXT MENU, slot 52.
+                currentClick = setClick(currentClick, "colour");
+                ItemStack right = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
+                ItemMeta rightMeta = right.getItemMeta();
+                rightMeta.setDisplayName(ChatColor.GREEN + "NEXT MENU");
+                lore = new ArrayList<>();
+                lore.add(ChatColor.GREEN + "Colour Selection");
+                rightMeta.setLore(lore);
+                right.setItemMeta(rightMeta);
+                right = newItemStackGUI(right, currentClick);
+                inv.setItem(52, right);
 
-                // PREVIOUS PAGE, slot 35.
-                ItemStack previous = new ItemStack(Material.RED_STAINED_GLASS_PANE);
-                previous = newItemStackGUI(previous, specialCLick);
-                inv.setItem(35, previous);
+                // EXIT, slot 53.
+                currentClick = setClick(currentClick, "exit");
+                ItemStack currentPotion = existingPotion.clone();
+                currentPotion = newItemStackGUI(currentPotion, currentClick);
+                inv.setItem(53, currentPotion);
 
                 player.openInventory(inv);
                 break;
             }
             case "colour": {
-                // TODO for colour, effecttype and type need to get rid of special click
                 inv = Bukkit.createInventory(null, 54, ChatColor.GOLD + "Select a Potion Colour");
-                PotionClick specialCLick = currentClick.clone();
-                specialCLick.setPage(0); // UNIVERSAL
-                currentClick.setClick("effect_type");
-                currentClick.setPage(0);
-                currentClick.setColour(true);
+                currentClick = setClick(currentClick, "effect_type");
+                currentClick = setPage(currentClick, 0);
 
-                // EXIT, slot 53.
-                specialCLick.setClick("exit");
-                ItemStack currentPotion = existingPotion.clone();
-                currentPotion = newItemStackGUI(currentPotion, specialCLick);
-                inv.setItem(53, currentPotion);
+                // PREVIOUS PAGE, slot 35.
+                ItemStack previous = new ItemStack(Material.RED_STAINED_GLASS_PANE);
+                previous = newItemStackGUI(previous, setClick(currentClick, "colour"));
+                inv.setItem(35, previous);
 
-                // NEXT MENU, slot 52.
-                specialCLick.setClick("effect_type");
-                ItemStack right = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
-                ItemMeta rightMeta = right.getItemMeta();
-                rightMeta.setDisplayName(ChatColor.GREEN + "NEXT MENU");
-                rightMeta.setLocalizedName(specialCLick.localizedNameFromPotionClick());
-                lore = new ArrayList<>();
-                lore.add(ChatColor.GREEN + "Effect Type(s) Selection");
-                rightMeta.setLore(lore);
-                right.setItemMeta(rightMeta);
-                right = newItemStackGUI(right, specialCLick);
-                inv.setItem(52, right);
+                // NEXT PAGE, slot 44.
+                ItemStack next = new ItemStack(Material.RED_STAINED_GLASS_PANE);
+                next = newItemStackGUI(next, setClick(currentClick, "colour"));
+                inv.setItem(44, next);
 
                 // PREVIOUS MENU, slot 51.
-                specialCLick.setClick("type");
                 ItemStack left = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
                 ItemMeta leftMeta = left.getItemMeta();
                 leftMeta.setDisplayName(ChatColor.GOLD + "PREVIOUS MENU");
-                leftMeta.setLocalizedName(specialCLick.localizedNameFromPotionClick());
                 lore = new ArrayList<>();
                 lore.add(ChatColor.GOLD + "Type Selection");
                 leftMeta.setLore(lore);
                 left.setItemMeta(leftMeta);
-                left = newItemStackGUI(left, specialCLick);
+                left = newItemStackGUI(left, setClick(currentClick, "type"));
                 inv.setItem(51, left);
 
-                // NEXT PAGE, slot 44.
-                specialCLick.setClick("colour");
-                ItemStack next = new ItemStack(Material.RED_STAINED_GLASS_PANE);
-                next = newItemStackGUI(next, specialCLick);
-                inv.setItem(44, next);
+                // NEXT MENU, slot 52.
+                ItemStack right = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
+                ItemMeta rightMeta = right.getItemMeta();
+                rightMeta.setDisplayName(ChatColor.GREEN + "NEXT MENU");
+                lore = new ArrayList<>();
+                lore.add(ChatColor.GREEN + "Effect Type(s) Selection");
+                rightMeta.setLore(lore);
+                right.setItemMeta(rightMeta);
+                right = newItemStackGUI(right, setClick(currentClick, "effect_type"));
+                inv.setItem(52, right);
 
-                // PREVIOUS PAGE, slot 35.
-                ItemStack previous = new ItemStack(Material.RED_STAINED_GLASS_PANE);
-                previous = newItemStackGUI(previous, specialCLick);
-                inv.setItem(35, previous);
+                // EXIT, slot 53.
+                ItemStack currentPotion = existingPotion.clone();
+                currentPotion = newItemStackGUI(currentPotion, setClick(currentClick, "exit"));
+                inv.setItem(53, currentPotion);
+
+                currentClick = setColour(currentClick, true);
 
                 // All potion colours.
                 ArrayList<Colour> colourList = newColourList();
@@ -804,7 +943,7 @@ public class main extends JavaPlugin implements Listener {
                     Color current = Color.fromRGB(c.getR(), c.getG(), c.getB());
                     String s = c.getName();
                     meta.setColor(current);
-                    meta.setDisplayName(chatColorFromColour(c) + s);
+                    meta.setDisplayName(chatColorFromColor(meta.getColor()) + s);
                     meta.setLore(null);
                     potionItemStack.setItemMeta(meta);
                     potionItemStack = newItemStackGUI(potionItemStack, currentClick);
@@ -815,63 +954,57 @@ public class main extends JavaPlugin implements Listener {
                 break;
             }
             case "effect_type": {
-                inv = Bukkit.createInventory(null, 54, ChatColor.GOLD + "Select Effect Type(s)");
-                PotionClick specialCLick = currentClick.clone();
-                specialCLick.setPage(0); // UNIVERSAL
-                currentClick.setClick("effect_dur");
-                currentClick.setPage(0);
-                currentClick.setEffectType(true);
+                inv = Bukkit.createInventory(null, 54, ChatColor.GOLD + "Select an Effect Type");
+                currentClick = setClick(currentClick, "effect_dur");
+                currentClick = setPage(currentClick, 0);
 
-                // EXIT, slot 53.
-                specialCLick.setClick("exit");
-                ItemStack currentPotion = existingPotion.clone();
-                currentPotion = newItemStackGUI(currentPotion, specialCLick);
-                inv.setItem(53, currentPotion);
+                // PREVIOUS PAGE, slot 35.
+                ItemStack previous = new ItemStack(Material.RED_STAINED_GLASS_PANE);
+                previous = newItemStackGUI(previous, setClick(currentClick, "effect_type"));
+                inv.setItem(35, previous);
 
-                // NEXT MENU, slot 52.
-                specialCLick.setClick("ingredient");
-                ItemStack right = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
-                ItemMeta rightMeta = right.getItemMeta();
-                rightMeta.setDisplayName(ChatColor.GREEN + "NEXT MENU");
-                rightMeta.setLocalizedName(specialCLick.localizedNameFromPotionClick());
-                lore = new ArrayList<>();
-                lore.add(ChatColor.GREEN + "Ingredient Selection");
-                rightMeta.setLore(lore);
-                right.setItemMeta(rightMeta);
-                right = newItemStackGUI(right, specialCLick);
-                inv.setItem(52, right);
+                // NEXT PAGE, slot 44.
+                ItemStack next = new ItemStack(Material.RED_STAINED_GLASS_PANE);
+                next = newItemStackGUI(next, setClick(currentClick, "effect_type"));
+                inv.setItem(44, next);
 
                 // PREVIOUS MENU, slot 51.
-                specialCLick.setClick("colour");
                 ItemStack left = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
                 ItemMeta leftMeta = left.getItemMeta();
                 leftMeta.setDisplayName(ChatColor.GOLD + "PREVIOUS MENU");
-                leftMeta.setLocalizedName(specialCLick.localizedNameFromPotionClick());
                 lore = new ArrayList<>();
                 lore.add(ChatColor.GOLD + "Colour Selection");
                 leftMeta.setLore(lore);
                 left.setItemMeta(leftMeta);
-                left = newItemStackGUI(left, specialCLick);
+                left = newItemStackGUI(left, setClick(currentClick, "colour"));
                 inv.setItem(51, left);
 
-                // NEXT PAGE, slot 44.
-                specialCLick.setClick("effect_type");
-                ItemStack next = new ItemStack(Material.RED_STAINED_GLASS_PANE);
-                next = newItemStackGUI(next, specialCLick);
-                inv.setItem(44, next);
+                // NEXT MENU, slot 52.
+                ItemStack right = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
+                ItemMeta rightMeta = right.getItemMeta();
+                rightMeta.setDisplayName(ChatColor.GREEN + "NEXT MENU");
+                lore = new ArrayList<>();
+                lore.add(ChatColor.GREEN + "Ingredient Selection");
+                rightMeta.setLore(lore);
+                right.setItemMeta(rightMeta);
+                right = newItemStackGUI(right, setClick(currentClick, "ingredient"));
+                inv.setItem(52, right);
 
-                // PREVIOUS PAGE, slot 35.
-                ItemStack previous = new ItemStack(Material.RED_STAINED_GLASS_PANE);
-                previous = newItemStackGUI(previous, specialCLick);
-                inv.setItem(35, previous);
+                // EXIT, slot 53.
+                ItemStack currentPotion = existingPotion.clone();
+                currentPotion = newItemStackGUI(currentPotion, setClick(currentClick, "exit"));
+                inv.setItem(53, currentPotion);
 
                 // No potion effect.
                 ItemStack potionItemStack = new ItemStack(existingPotion.getType());
                 PotionMeta meta = (PotionMeta) existingPotion.getItemMeta();
-                meta.setDisplayName(ChatColor.DARK_RED + "No Effects");
-                meta.setLore(null);
+                meta.setDisplayName(chatColorFromColor(meta.getColor()) + "NO EFFECTS");
+                lore = new ArrayList<>();
+                lore.add("");
+                lore.add(ChatColor.GOLD + "This potion will have no effects.");
+                meta.setLore(lore);
                 potionItemStack.setItemMeta(meta);
-                potionItemStack = newItemStackGUI(potionItemStack, currentClick);
+                potionItemStack = newItemStackGUI(potionItemStack, setEffect(setClick(currentClick, "no_effects"), true));
                 inv.addItem(potionItemStack);
 
                 // All potion effect types.
@@ -882,8 +1015,6 @@ public class main extends JavaPlugin implements Listener {
                 }
                 Collections.sort(petNames);
 
-                // TODO also need to set any existing effects to "remove" - left click to modify, right click to remove
-                //      if (((PotionMeta) existingPotion.getItemMeta()).getCustomEffects(). contains it idk
                 for (String petName : petNames) {
                     PotionEffectType pet = petList[0];
                     for (PotionEffectType a : petList) {
@@ -895,12 +1026,48 @@ public class main extends JavaPlugin implements Listener {
                     potionItemStack = new ItemStack(existingPotion.getType());
                     meta = (PotionMeta) existingPotion.getItemMeta();
                     meta.setDisplayName(chatColorFromColor(meta.getColor()) + pet.getName());
+
+                    boolean hasEffect = false;
+                    for (PotionEffect effect: meta.getCustomEffects()) {
+                        if (effect.getType() == pet) {
+                            hasEffect = true;
+                            break;
+                        }
+                    }
+
+                    String commonName = pet.getName();
+                    switch (pet.getName()) {
+                        case "CONFUSION":
+                            commonName = normaliseCapitalise(commonName.concat(" " + "(NAUSEA)"), "_");
+                            break;
+                        case "FAST_DIGGING":
+                            commonName = normaliseCapitalise(commonName.concat(" " + "(HASTE)"), "_");
+                            break;
+                        case "INCREASE_DAMAGE":
+                            commonName = normaliseCapitalise(commonName.concat(" " + "(STRENGTH)"), "_");
+                            break;
+                        case "SLOW_DIGGING":
+                            commonName = normaliseCapitalise(commonName.concat(" " + "(MINING_FATIGUE)"), "_");
+                            break;
+                        default:
+                            commonName = normaliseCapitalise(commonName, "_");
+                    }
+
                     lore = new ArrayList<>();
-                    lore.add(ChatColor.GREEN + "Add " + pet.getName());
-                    leftMeta.setLore(lore);
-                    meta.setLore(lore);
-                    potionItemStack.setItemMeta(meta);
-                    potionItemStack = newItemStackGUI(potionItemStack, currentClick);
+                    lore.add("");
+                    if (hasEffect) {
+                        lore.add(ChatColor.GOLD + "Left click to modify " + commonName + ".");
+                        lore.add(ChatColor.RED + "Right click to remove " + commonName + ".");
+                        meta.setLore(lore);
+                        potionItemStack.setItemMeta(meta);
+                        potionItemStack = newItemStackGUI(potionItemStack, setClick(currentClick, "mixed"));
+                    } else {
+                        lore.add(ChatColor.GREEN + "Click to add " + commonName + ".");
+                        meta.setLore(lore);
+                        potionItemStack.setItemMeta(meta);
+                        potionItemStack = newItemStackGUI(potionItemStack, currentClick);
+                    }
+
                     inv.addItem(potionItemStack);
                 }
 
@@ -908,188 +1075,479 @@ public class main extends JavaPlugin implements Listener {
                 break;
             }
             case "effect_dur": {
-                anvil = new AnvilGUI.Builder();
-                anvil.title(ChatColor.GOLD + "Effect Duration");
-                // TODO use lore to add instructions
-                //      clicking on left slot takes you back?? clicking on right continues you
-                //      for effect_amp, clicking on left slot takes you back to the effect menu too
-                anvil.text(ChatColor.RESET + "Duration in seconds");
-                anvil.onComplete((whoTyped, whatWasTyped) -> AnvilGUI.Response.close());
-                anvil.plugin(this);
-                currentClick.setClick("effect_amp");
-                currentClick.setEffectDur(true);
+                currentClick = setClick(currentClick, "effect_amp");
 
-                ItemStack barrier = new ItemStack(Material.BARRIER);
-                barrier = newItemStackGUI(barrier, currentClick);
-                anvil.item(barrier);
+                AnvilGUI.Builder anvil = new AnvilGUI.Builder();
+                anvil.title(ChatColor.GOLD + "Effect Duration");
+
+                // POTION, slot 0 and 2.
+                ItemStack currentPotion = existingPotion.clone();
+                ItemMeta meta = currentPotion.getItemMeta();
+                lore = new ArrayList<>();
+                lore.add("");
+                lore.add(ChatColor.GOLD + "This is your current potion.");
+                lore.add(ChatColor.GOLD + "Enter the effect duration (in seconds from 1 to 26,843,545).");
+                lore.add(ChatColor.GOLD + "You will not be able to change menu or save in this menu.");
+                lore.add(ChatColor.GOLD + "If you have misclicked, just continue.");
+                lore.add(ChatColor.GREEN + "Left click the output slot to continue.");
+                lore.add(ChatColor.RED + "Right click the output slot to exit without saving.");
+                meta.setLore(lore);
+                meta.setLocalizedName(currentClick);
+                currentPotion.setItemMeta(meta);
+                anvil.item(currentPotion);
+
+                anvil.text(ChatColor.RESET + "Enter here:");
+                anvil.onComplete((whoTyped, whatWasTyped) -> {
+                    return AnvilGUI.Response.text("Enter here:");
+                });
+                anvil.plugin(this);
 
                 anvilInv = anvil.open(player);
                 break;
             }
             case "effect_amp": {
-                anvil = new AnvilGUI.Builder();
-                // TODO the next menu for effect_type will be ingredient
-                anvil.title(ChatColor.GOLD + "Effect Amplifier");
-                anvil.text(ChatColor.RESET + "Amplifier from 0 to 127");
-                anvil.onComplete((whoTyped, whatWasTyped) -> AnvilGUI.Response.close());
-                anvil.plugin(this);
-                currentClick.setClick("ingredient");
-                currentClick.setEffectAmp(true);
+                currentClick = setClick(currentClick, "effect_type");
 
-                ItemStack barrier = new ItemStack(Material.BARRIER);
-                barrier = newItemStackGUI(barrier, currentClick);
-                anvil.item(barrier);
+                AnvilGUI.Builder anvil = new AnvilGUI.Builder();
+                anvil.title(ChatColor.GOLD + "Effect Amplifier");
+
+                // POTION, slot 0 and 2.
+                ItemStack currentPotion = existingPotion.clone();
+                ItemMeta meta = currentPotion.getItemMeta();
+                lore = new ArrayList<>();
+                lore.add("");
+                lore.add(ChatColor.GOLD + "This is your current potion.");
+                lore.add(ChatColor.GOLD + "Enter the effect amplifier (integer from 0 to 127).");
+                lore.add(ChatColor.GOLD + "0 means tier I, eg. Regeneration I.");
+                lore.add(ChatColor.GOLD + "Similarly, 1 means tier II, eg. Regeneration II, and so on");
+                lore.add(ChatColor.GOLD + "You will not be able to change menu or save in this menu.");
+                lore.add(ChatColor.GOLD + "If you have misclicked, just continue.");
+                lore.add(ChatColor.GREEN + "Left click the output slot to continue.");
+                lore.add(ChatColor.RED + "Right click the output slot to exit without saving.");
+                meta.setLore(lore);
+                meta.setLocalizedName(currentClick);
+                currentPotion.setItemMeta(meta);
+                anvil.item(currentPotion);
+
+                anvil.text(ChatColor.RESET + "Enter here:");
+                anvil.onComplete((whoTyped, whatWasTyped) -> {
+                    return AnvilGUI.Response.text("Enter here:");
+                });
+                anvil.plugin(this);
 
                 anvilInv = anvil.open(player);
                 break;
             }
             case "ingredient": {
                 inv = Bukkit.createInventory(null, 54, ChatColor.GOLD + "Select an Ingredient");
-                currentClick.setClick("predecessor");
-                currentClick.setIngredient(true);
-                ItemStack barrier = new ItemStack(Material.BARRIER);
-                barrier = newItemStackGUI(barrier, currentClick);
-                inv.setItem(53, barrier);
 
-                ItemStack next = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
+                Material[] allMaterials = Material.values();
+                List<Material> allItemMaterials = new ArrayList<>();
+                for (Material material : allMaterials) {
+                    if (!material.isItem() || material == Material.AIR || material == Material.POTION ||
+                            material == Material.SPLASH_POTION || material == Material.LINGERING_POTION ||
+                            material == Material.DEBUG_STICK || material == Material.KNOWLEDGE_BOOK) {
+                    } else {
+                        allItemMaterials.add(material);
+                    }
+                }
+                int numMaterials = 0;
+                int pageNumToDisplay = getPage(previousClick);
+                int totalIngredients = allItemMaterials.size();
+                int PAGESIZE = 49;
+                boolean needsNextPage = (totalIngredients - PAGESIZE * pageNumToDisplay) > PAGESIZE;
+
+                // PREVIOUS PAGE, slot 35.
+                ItemStack previous = pageNumToDisplay != 0 ? new ItemStack(Material.ORANGE_STAINED_GLASS_PANE) : new ItemStack(Material.RED_STAINED_GLASS_PANE);
+                currentClick = setClick(previousClick,"ingredient");
+                currentClick = setPage(currentClick, pageNumToDisplay != 0 ? pageNumToDisplay - 1 : REDSTAINEDGLASSNUMBER);
+                ItemMeta prevMeta = previous.getItemMeta();
+                prevMeta.setDisplayName(ChatColor.GOLD + "PREVIOUS PAGE");
+                if (pageNumToDisplay != 0) {
+                    lore = new ArrayList<>();
+                    lore.add(ChatColor.GOLD + "Page " + (pageNumToDisplay - 1));
+                    prevMeta.setLore(lore);
+                }
+                previous.setItemMeta(prevMeta);
+                previous = newItemStackGUI(previous, currentClick);
+                inv.setItem(35, previous);
+
+                // NEXT PAGE, slot 44.
+                ItemStack next = needsNextPage ? new ItemStack(Material.LIME_STAINED_GLASS_PANE) : new ItemStack(Material.RED_STAINED_GLASS_PANE);
+                ItemMeta nextMeta = next.getItemMeta();
+                currentClick = setClick(previousClick,"ingredient");
+                currentClick = setPage(currentClick, needsNextPage ? pageNumToDisplay + 1 : REDSTAINEDGLASSNUMBER);
+                nextMeta.setDisplayName(ChatColor.GREEN + "NEXT PAGE");
+                if (needsNextPage) {
+                    lore = new ArrayList<>();
+                    lore.add(ChatColor.GREEN + "Page " + (pageNumToDisplay + 1));
+                    nextMeta.setLore(lore);
+                }
+                next.setItemMeta(nextMeta);
                 next = newItemStackGUI(next, currentClick);
                 inv.setItem(44, next);
 
-                ItemStack previous = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
-                previous = newItemStackGUI(previous, currentClick);
-                inv.setItem(35, previous);
+                currentClick = setPage(previousClick,0);
+
+                // PREVIOUS MENU, slot 51.
+                ItemStack left = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
+                ItemMeta leftMeta = left.getItemMeta();
+                leftMeta.setDisplayName(ChatColor.GOLD + "PREVIOUS MENU");
+                lore = new ArrayList<>();
+                lore.add(ChatColor.GOLD + "Effect Type(s) Selection");
+                leftMeta.setLore(lore);
+                left.setItemMeta(leftMeta);
+                left = newItemStackGUI(left, setClick(currentClick, "effect_type"));
+                inv.setItem(51, left);
+
+                // NEXT MENU, slot 52.
+                ItemStack right = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
+                ItemMeta rightMeta = right.getItemMeta();
+                rightMeta.setDisplayName(ChatColor.GREEN + "NEXT MENU");
+                lore = new ArrayList<>();
+                lore.add(ChatColor.GREEN + "Naming");
+                rightMeta.setLore(lore);
+                right.setItemMeta(rightMeta);
+                right = newItemStackGUI(right, setClick(currentClick, "name"));
+                inv.setItem(52, right);
+
+                // EXIT, slot 53.
+                ItemStack currentPotion = existingPotion.clone();
+                currentPotion = newItemStackGUI(currentPotion, setClick(currentClick, "exit"));
+                inv.setItem(53, currentPotion);
+
+                currentClick = setClick(previousClick, "ingredient_chosen");
+                currentClick = setPage(currentClick, 0);
+
+                // All materials.
+                for (Material material : allItemMaterials) {
+                    if (numMaterials < PAGESIZE * pageNumToDisplay) {
+                        numMaterials++;
+                        continue;
+                    }
+
+                    ItemStack ingredientItemStack = new ItemStack(material);
+                    ItemMeta meta = ingredientItemStack.getItemMeta();
+
+                    // TODO handle whether or not it has the ingredient already
+                    // TODO don't allow two with same predecessor to have same ingredient, will have to alter the
+                    //      length of the allMaterials above too
+
+                    /*boolean hasIngredient = false;
+                    for (PotionEffect effect: meta.getCustomEffects()) {
+                        if (effect.getType() == pet) {
+                            hasEffect = true;
+                            break;
+                        }
+                    }*/
+
+                    lore = new ArrayList<>();
+                    if (false) {
+                        lore.add("");
+                        lore.add(ChatColor.RED + "Click to remove " + material.name() + " and its corresponding predecessor."); // TODO add predecessor name here
+                        currentClick = setClick(currentClick, "ingredient");
+                    } else {
+                        lore.add("");
+                        lore.add(ChatColor.GREEN + "Click to add " + material.name() + ".");
+                    }
+                    meta.setLore(lore);
+
+                    ingredientItemStack.setItemMeta(meta);
+                    ingredientItemStack = newItemStackGUI(ingredientItemStack, currentClick);
+                    inv.addItem(ingredientItemStack);
+
+                    numMaterials++;
+                    if (numMaterials >= PAGESIZE * (pageNumToDisplay + 1)) {
+                        break;
+                    }
+                }
 
                 player.openInventory(inv);
                 break;
             }
             case "predecessor": {
                 inv = Bukkit.createInventory(null, 54, ChatColor.GOLD + "Select a Predecessor");
-                // TODO multiple predecessors
-                currentClick.setClick("name");
-                currentClick.setPredecessor(true);
-                ItemStack barrier = new ItemStack(Material.BARRIER);
-                barrier = newItemStackGUI(barrier, currentClick);
-                inv.setItem(53, barrier);
 
-                ItemStack next = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
+                int numPredecessors = 0;
+                int pageNumToDisplay = getPage(previousClick);
+                int totalPredecessors = allCustomPotions.size() + 4;
+                int PAGESIZE = 49;
+                boolean needsNextPage = (totalPredecessors - PAGESIZE * pageNumToDisplay) > PAGESIZE;
+
+                // PREVIOUS PAGE, slot 35.
+                ItemStack previous = pageNumToDisplay != 0 ? new ItemStack(Material.ORANGE_STAINED_GLASS_PANE) : new ItemStack(Material.RED_STAINED_GLASS_PANE);
+                currentClick = setClick(previousClick,"predecessor");
+                currentClick = setPage(currentClick, pageNumToDisplay != 0 ? pageNumToDisplay - 1 : REDSTAINEDGLASSNUMBER);
+                ItemMeta prevMeta = previous.getItemMeta();
+                prevMeta.setDisplayName(ChatColor.GOLD + "PREVIOUS PAGE");
+                if (pageNumToDisplay != 0) {
+                    lore = new ArrayList<>();
+                    lore.add(ChatColor.GOLD + "Page " + (pageNumToDisplay - 1));
+                    prevMeta.setLore(lore);
+                }
+                previous.setItemMeta(prevMeta);
+                previous = newItemStackGUI(previous, currentClick);
+                inv.setItem(35, previous);
+
+                // NEXT PAGE, slot 44.
+                ItemStack next = needsNextPage ? new ItemStack(Material.LIME_STAINED_GLASS_PANE) : new ItemStack(Material.RED_STAINED_GLASS_PANE);
+                ItemMeta nextMeta = next.getItemMeta();
+                currentClick = setClick(previousClick,"predecessor");
+                currentClick = setPage(currentClick, needsNextPage ? pageNumToDisplay + 1 : REDSTAINEDGLASSNUMBER);
+                nextMeta.setDisplayName(ChatColor.GREEN + "NEXT PAGE");
+                if (needsNextPage) {
+                    lore = new ArrayList<>();
+                    lore.add(ChatColor.GREEN + "Page " + (pageNumToDisplay + 1));
+                    nextMeta.setLore(lore);
+                }
+                next.setItemMeta(nextMeta);
                 next = newItemStackGUI(next, currentClick);
                 inv.setItem(44, next);
 
-                ItemStack previous = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
-                previous = newItemStackGUI(previous, currentClick);
-                inv.setItem(35, previous);
+                currentClick = setPage(previousClick,0);
+
+                // PREVIOUS MENU, slot 51.
+                ItemStack left = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
+                ItemMeta leftMeta = left.getItemMeta();
+                leftMeta.setDisplayName(ChatColor.GOLD + "PREVIOUS MENU");
+                lore = new ArrayList<>();
+                lore.add(ChatColor.GOLD + "Ingredient Selection");
+                lore.add(ChatColor.RED + "Warning: you will lose your choice of ingredient!");
+                leftMeta.setLore(lore);
+                left.setItemMeta(leftMeta);
+                left = newItemStackGUI(left, setClick(currentClick, "ingredient"));
+                inv.setItem(51, left);
+
+                // NEXT MENU, slot 52.
+                ItemStack right = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
+                ItemMeta rightMeta = right.getItemMeta();
+                rightMeta.setDisplayName(ChatColor.GREEN + "NEXT MENU");
+                lore = new ArrayList<>();
+                lore.add(ChatColor.GREEN + "Naming");
+                rightMeta.setLore(lore);
+                right.setItemMeta(rightMeta);
+                right = newItemStackGUI(right, setClick(currentClick, "name"));
+                inv.setItem(52, right);
+
+                // EXIT, slot 53.
+                ItemStack currentPotion = existingPotion.clone();
+                currentPotion = newItemStackGUI(currentPotion, setClick(currentClick, "exit"));
+                inv.setItem(53, currentPotion);
+
+                // 4 elementary potions.
+                currentClick = setClick(previousClick, "ingredient");
+                currentClick = setPage(currentClick, 0); // for all the potions
+                List<Colour> colourList = newColourList();
+                if (pageNumToDisplay == 0) {
+                    List<PotionType> elementaries = new ArrayList<>();
+                    elementaries.add(PotionType.WATER);
+                    elementaries.add(PotionType.AWKWARD);
+                    elementaries.add(PotionType.MUNDANE);
+                    elementaries.add(PotionType.THICK);
+                    for (PotionType elementary : elementaries) {
+                        ItemStack potionItemStack = new ItemStack(Material.POTION);
+                        PotionMeta meta = (PotionMeta) potionItemStack.getItemMeta();
+                        PotionData data = new PotionData(elementary);
+                        meta.setBasePotionData(data);
+                        meta.setLore(null);
+                        potionItemStack.setItemMeta(meta);
+                        potionItemStack = newItemStackGUI(potionItemStack, currentClick);
+                        inv.addItem(potionItemStack);
+                    }
+                }
+                numPredecessors += 4;
+
+                // All custom potions from potions.yml.
+                for (PotionInfo pi : allCustomPotions) {
+                    // TODO need to remove the potion itself if from potions.yml or at least handle what happens when you make live edits and it screws with itself
+                    if (numPredecessors < PAGESIZE * pageNumToDisplay) {
+                        numPredecessors++;
+                        continue;
+                    }
+                    ItemStack potionItemStack = pi.itemstack.clone();
+                    PotionMeta meta = (PotionMeta) potionItemStack.getItemMeta();
+                    lore = new ArrayList<>();
+                    lore.add("");
+                    lore.add(ChatColor.DARK_PURPLE + "Recipes:");
+                    for (PotionRecipe pr : pi.potionrecipes) {
+                        lore.add(ChatColor.GOLD + normaliseCapitalise(pr.ingredient.name(), "_") + " + "
+                                + elementaryName((PotionMeta) pr.predecessor.getItemMeta()) + " (" +
+                                normaliseCapitalise(pr.predecessor.getType().name(), "_") + ")");
+                    }
+                    meta.setLore(lore);
+                    meta.setDisplayName(chatColorFromColor(meta.getColor()) + meta.getDisplayName());
+                    potionItemStack.setItemMeta(meta);
+                    potionItemStack = newItemStackGUI(potionItemStack, currentClick);
+                    inv.addItem(potionItemStack);
+                    numPredecessors++;
+                    if (numPredecessors >= PAGESIZE * (pageNumToDisplay + 1)) {
+                        break;
+                    }
+                }
 
                 player.openInventory(inv);
                 break;
             }
             case "name": {
-                inv = Bukkit.createInventory(null, 54, ChatColor.GOLD + "Enter a Name");
-                currentClick.setClick("exit");
-                currentClick.setName(true);
-                //TODO anvil left side will be Revise Changes (yellow), middle Save and Exit (Green), right exit (red)
-                // TODO left side will be "type", middle and right will both be exit.
-                ItemStack barrier = new ItemStack(Material.BARRIER);
-                barrier = newItemStackGUI(barrier, currentClick);
-                inv.setItem(53, barrier);
+                currentClick = setClick(previousClick, "final");
+                currentClick = setName(currentClick, true);
 
-                ItemStack next = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
-                next = newItemStackGUI(next, currentClick);
-                inv.setItem(44, next);
+                AnvilGUI.Builder anvil = new AnvilGUI.Builder();
+                anvil.title(ChatColor.GOLD + "Enter a Name");
 
-                ItemStack previous = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
-                previous = newItemStackGUI(previous, currentClick);
-                inv.setItem(35, previous);
+                // TODO if potion is incomplete, take them to first empty menu (ie. not not)
 
-                player.openInventory(inv);
+                // POTION, slot 0 and 2.
+                ItemStack currentPotion = existingPotion.clone();
+                ItemMeta meta = currentPotion.getItemMeta();
+                lore = new ArrayList<>();
+                lore.add("");
+                lore.add(ChatColor.GOLD + "This is your current potion.");
+                lore.add(ChatColor.GOLD + "The potion name must be unique.");
+                lore.add(ChatColor.GOLD + "You will have the option to review changes in the next menu.");
+                lore.add(ChatColor.GREEN + "Left click the output slot to continue.");
+                lore.add(ChatColor.RED + "Right click the output slot to exit without saving.");
+                meta.setLore(lore);
+                meta.setLocalizedName(currentClick);
+                currentPotion.setItemMeta(meta);
+                anvil.item(currentPotion);
+
+                anvil.text(ChatColor.RESET + "Enter here:");
+                anvil.onComplete((whoTyped, whatWasTyped) -> {
+                    // TODO check if potion already exists with the name
+                    return AnvilGUI.Response.text("Enter here:");
+                });
+                anvil.plugin(this);
+
+                anvilInv = anvil.open(player);
                 break;
             }
+            case "final":
+                inv = Bukkit.createInventory(null, 54, ChatColor.GOLD + "Confirm Changes?");
+                // TODO slot 23 modify; slot 24 exit without saving; slot 25 save and exit
+                // TODO this is all very scrappy temp code. need to fix
+                ItemStack currentPotion = existingPotion.clone();
+                currentClick = setClick(previousClick, "complete");
+                PotionMeta meta = (PotionMeta) currentPotion.getItemMeta();
+                lore = new ArrayList<>();
+                lore.add("");
+                lore.add(ChatColor.DARK_PURPLE + "Recipes:");
+                for (PotionRecipe pr : potionRecipesInput) {
+                    lore.add(ChatColor.GOLD + normaliseCapitalise(pr.ingredient.name(), "_") + " + "
+                            + elementaryName((PotionMeta) pr.predecessor.getItemMeta()) + " (" +
+                            normaliseCapitalise(pr.predecessor.getType().name(), "_") + ")");
+                }
+                meta.setLore(lore);
+                meta.setDisplayName(chatColorFromColor(meta.getColor()) + meta.getDisplayName());
+                currentPotion.setItemMeta(meta);
+                currentPotion = newItemStackGUI(currentPotion, currentClick);
+
+                inv.setItem(22, currentPotion);
+                player.openInventory(inv);
+                break;
         }
 
 
-
-
-        /*// Test to generate 18 potions.
-        ItemStack potion = new ItemStack((Material.LINGERING_POTION));
-        PotionMeta meta = (PotionMeta) potion.getItemMeta();
-        if (meta == null) {
-            this.log.severe("Unknown error. Skipping the potion.");
-            return true;
-        }
-
-
-        ArrayList<Colour> colourList = newColourList();
-
-        Colour h = colourList.get((new Random()).nextInt(17));
-        Color k = Color.fromRGB(h.getR(), h.getG(), h.getB());
-        meta.setColor(k);
-        String j = "Jimbering";
-        meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', "&r" + j));
-        potion.setItemMeta(meta);
-        inv.addItem(potion);
-
-        potionData.getData().set(j + ".type", potion.getType().toString().toUpperCase());
-        potionData.getData().set(j + ".colour.name", h.getName());
-        potionData.getData().set(j + ".colour.red", h.getR());
-        potionData.getData().set(j + ".colour.green", h.getG());
-        potionData.getData().set(j + ".colour.blue", h.getB());
-        potionData.getData().set(j + ".colour.blue", h.getB());
-        potionData.getData().set(j + ".effects", "none");
-        potionData.getData().set(j + ".ingredient", "SOUL_SAND");
-        potionData.getData().set(j + ".predecessor.name", "Awkward Potion");
-        potionData.getData().set(j + ".predecessor.type", "POTION");
-        potionData.getData().set(j + ".predecessor.effects", "none");
-
-
-        potion = new ItemStack(Material.POTION);
-        meta = (PotionMeta) potion.getItemMeta();
-        if (meta == null) {
-            this.log.severe("Unknown error. Skipping the potion.");
-            return true;
-        }
-
-        meta.addCustomEffect(new PotionEffect(PotionEffectType.ABSORPTION, 100, 125), true);
-        meta.addCustomEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, 2505, 126), true);
-        meta.addCustomEffect(new PotionEffect(PotionEffectType.DAMAGE_RESISTANCE, 420, 127), true);
-        meta.addCustomEffect(new PotionEffect(PotionEffectType.HEALTH_BOOST, 420, 128), true);
-        meta.addCustomEffect(new PotionEffect(PotionEffectType.WEAKNESS, 420, 129), true);
-
-        int i = 0;
-        for (Colour c : colourList) {
-            Color current = Color.fromRGB(c.getR(), c.getG(), c.getB());
-            String s = c.getName();
-            meta.setColor(current);
-            meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', "&r" + s));
-            potion.setItemMeta(meta);
-
-            potionData.getData().set(s + ".type", potion.getType().toString().toUpperCase());
-            potionData.getData().set(s + ".colour.name", c.getName());
-            potionData.getData().set(s + ".colour.red", c.getR());
-            potionData.getData().set(s + ".colour.green", c.getG());
-            potionData.getData().set(s + ".colour.blue", c.getB());
-
-            for (PotionEffect effect : ((PotionMeta) potion.getItemMeta()).getCustomEffects()) {
-                potionData.getData().set(s + ".effects." + effect.getType().getName() + ".duration", effect.getDuration());
-                potionData.getData().set(s + ".effects." + effect.getType().getName() + ".amplifier", effect.getAmplifier());
+        // Test to generate 18 potions (a couple times).
+        /*for (int counter = 0; counter < 6; counter++) {
+            ItemStack potion = new ItemStack((Material.LINGERING_POTION));
+            PotionMeta meta = (PotionMeta) potion.getItemMeta();
+            if (meta == null) {
+                this.log.severe("Unknown error. Skipping the potion.");
+                return true;
             }
 
-            potionData.getData().set(s + ".ingredient", "BUCKET");
-            potionData.getData().set(s + ".predecessor.name", "Jimbering");
-            potionData.getData().set(s + ".predecessor.type", "LINGERING_POTION");
-            potionData.getData().set(s + ".predecessor.effects", "none");
+            ArrayList<Colour> colourList = newColourList();
 
-            i++;
-            if (i >= 53) break;
-        }
-        potionData.saveData();*/
+            Colour h = colourList.get((new Random()).nextInt(17));
+            Color k = Color.fromRGB(h.getR(), h.getG(), h.getB());
+            meta.setColor(k);
+            String j = "Jimbering" + counter;
+            meta.setDisplayName(ChatColor.RESET + j);
+            potion.setItemMeta(meta);
 
+            potionData.getData().set(j + ".type", potion.getType().toString().toUpperCase());
+            potionData.getData().set(j + ".colour.name", h.getName());
+            potionData.getData().set(j + ".colour.red", h.getR());
+            potionData.getData().set(j + ".colour.green", h.getG());
+            potionData.getData().set(j + ".colour.blue", h.getB());
+            potionData.getData().set(j + ".effects", "none");
+            potionData.getData().set(j + ".predecessors.Awkward Potion.type", "POTION");
+            potionData.getData().set(j + ".predecessors.Awkward Potion.effects", "none");
+            potionData.getData().set(j + ".predecessors.Awkward Potion.ingredient", "SOUL_SAND");
+
+            potion = new ItemStack(Material.POTION);
+            meta = (PotionMeta) potion.getItemMeta();
+            if (meta == null) {
+                this.log.severe("Unknown error. Skipping the potion.");
+                return true;
+            }
+
+            meta.addCustomEffect(new PotionEffect(PotionEffectType.ABSORPTION, 60, 0), true);
+            meta.addCustomEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, 60, 1), true);
+            meta.addCustomEffect(new PotionEffect(PotionEffectType.DAMAGE_RESISTANCE, 60, 2), true);
+            meta.addCustomEffect(new PotionEffect(PotionEffectType.HEALTH_BOOST, 60, 3), true);
+            meta.addCustomEffect(new PotionEffect(PotionEffectType.WEAKNESS, 600, 4), true);
+
+            int i = 0;
+            for (Colour c : colourList) {
+                Color current = Color.fromRGB(c.getR(), c.getG(), c.getB());
+                String s = c.getName() + counter;
+                meta.setColor(current);
+                meta.setDisplayName(ChatColor.RESET + s);
+                potion.setItemMeta(meta);
+
+                potionData.getData().set(s + ".type", potion.getType().toString().toUpperCase());
+                potionData.getData().set(s + ".colour.name", c.getName());
+                potionData.getData().set(s + ".colour.red", c.getR());
+                potionData.getData().set(s + ".colour.green", c.getG());
+                potionData.getData().set(s + ".colour.blue", c.getB());
+
+                for (PotionEffect effect : ((PotionMeta) potion.getItemMeta()).getCustomEffects()) {
+                    potionData.getData().set(s + ".effects." + effect.getType().getName() + ".duration", effect.getDuration());
+                    potionData.getData().set(s + ".effects." + effect.getType().getName() + ".amplifier", effect.getAmplifier());
+                }
+
+                potionData.getData().set(s + ".predecessors.Jimbering" + counter + ".type", "LINGERING_POTION");
+                potionData.getData().set(s + ".predecessors.Jimbering" + counter + ".effects", "none");
+                potionData.getData().set(s + ".predecessors.Jimbering" + counter + ".ingredient", "BUCKET");
+                i++;
+                if (i >= 53) break;
+            }
+            potionData.saveData();
+        }*/
 
         return false;
     }
 
     // Modifying potions on command line for console.
     public boolean consoleModifyPotions (CommandSender sender) {
+        return false;
+    }
 
-
+    // Give potions to players.
+    public boolean givePotions(CommandSender sender, String potionName, String quantity) {
+        int num;
+        ItemStack potion = null;
+        try {
+            num = Integer.parseInt(quantity);
+        } catch (Exception e) {
+            sender.sendMessage(ChatColor.RED + quantity + " is not a valid integer quantity.");
+            return true;
+        }
+        for (PotionInfo customPotion : allCustomPotions) {
+            if (customPotion.name.equalsIgnoreCase(potionName)) {
+                potion = customPotion.itemstack;
+            }
+        }
+        if (potion == null) {
+            sender.sendMessage(ChatColor.RED + potionName + " was not found in the list of custom potions.");
+            return true;
+        }
+        while (num > 0) {
+            ((Player) sender).getInventory().addItem(potion);
+            num--;
+        }
         return false;
     }
 
@@ -1169,14 +1627,12 @@ public class main extends JavaPlugin implements Listener {
                     // Ingredient slot is empty, insert item stack directly.
                     brewingStand.setIngredient(insertIngredient);
 
-                    BukkitScheduler scheduler = getServer().getScheduler();
-                    scheduler.scheduleSyncDelayedTask(this, new Runnable() {
-                        @SuppressWarnings("deprecation")
+                    getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
                         @Override
                         public void run() {
-                            event.setCursor(new ItemStack(Material.AIR));
+                            event.getWhoClicked().setItemOnCursor(new ItemStack(Material.AIR));
                         }
-                    }, 1L);
+                    }, 0L);
                 } else if (existingIngredient.getType().equals(insertIngredient.getType())) {
                     // Ingredient slot matches, insert item stack until ingredient slot full, or source empty.
                     int resultantStackSize = insertIngredient.getAmount() + existingIngredient.getAmount();
@@ -1186,15 +1642,13 @@ public class main extends JavaPlugin implements Listener {
                         toInsert.setAmount(resultantStackSize);
 
                         // Insert ingredient and set cursor to nothing.
-                        BukkitScheduler scheduler = getServer().getScheduler();
-                        scheduler.scheduleSyncDelayedTask(this, new Runnable() {
-                            @SuppressWarnings("deprecation")
+                        getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
                             @Override
                             public void run() {
                                 brewingStand.setIngredient(toInsert);
-                                event.setCursor(new ItemStack(Material.AIR));
+                                event.getWhoClicked().setItemOnCursor(new ItemStack(Material.AIR));
                             }
-                        }, 1L);
+                        }, 0L);
                     } else {
                         // Combined stack is too large to be placed in the ingredients slot.
                         ItemStack toInsert = insertIngredient.clone();
@@ -1203,27 +1657,23 @@ public class main extends JavaPlugin implements Listener {
                         // Insert ingredient and set cursor to resultant stack size.
                         ItemStack toCursor = insertIngredient.clone();
                         toCursor.setAmount(resultantStackSize - existingIngredient.getMaxStackSize());
-                        BukkitScheduler scheduler = getServer().getScheduler();
-                        scheduler.scheduleSyncDelayedTask(this, new Runnable() {
-                            @SuppressWarnings("deprecation")
+                        getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
                             @Override
                             public void run() {
                                 brewingStand.setIngredient(toInsert);
-                                event.setCursor(toCursor);
+                                event.getWhoClicked().setItemOnCursor(toCursor);
                             }
-                        }, 1L);
+                        }, 0L);
                     }
                 } else {
                     // Ingredient slot does not match, swap cursor with existing ingredient.
-                    BukkitScheduler scheduler = getServer().getScheduler();
-                    scheduler.scheduleSyncDelayedTask(this, new Runnable() {
-                        @SuppressWarnings("deprecation")
+                    getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
                         @Override
                         public void run() {
                             brewingStand.setIngredient(insertIngredient);
-                            event.setCursor(existingIngredient);
+                            event.getWhoClicked().setItemOnCursor(existingIngredient);
                         }
-                    }, 1L);
+                    }, 0L);
                 }
                 cancel = true;
                 break;
@@ -1263,15 +1713,13 @@ public class main extends JavaPlugin implements Listener {
                         ItemStack toCursor = insertIngredient.clone();
                         toCursor.setAmount(resultantStackSize - existingIngredient.getMaxStackSize());
 
-                        BukkitScheduler scheduler = getServer().getScheduler();
-                        scheduler.scheduleSyncDelayedTask(this, new Runnable() {
-                            @SuppressWarnings("deprecation")
+                        getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
                             @Override
                             public void run() {
                                 brewingStand.setIngredient(toInsert);
-                                event.setCursor(toCursor);
+                                event.getWhoClicked().setItemOnCursor(toCursor);
                             }
-                        }, 1L);
+                        }, 0L);
                     } else if (event.getClick().equals(ClickType.RIGHT)) {
                         int resultantStackSize = existingIngredient.getAmount() + 1;
                         if (resultantStackSize <= existingIngredient.getMaxStackSize()) {
@@ -1282,28 +1730,24 @@ public class main extends JavaPlugin implements Listener {
                             ItemStack ingredientMinusOne = insertIngredient.clone();
                             ingredientMinusOne.setAmount(insertIngredient.getAmount() - 1);
 
-                            BukkitScheduler scheduler = getServer().getScheduler();
-                            scheduler.scheduleSyncDelayedTask(this, new Runnable() {
-                                @SuppressWarnings("deprecation")
+                            getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
                                 @Override
                                 public void run() {
                                     brewingStand.setIngredient(toInsert);
-                                    event.setCursor(ingredientMinusOne);
+                                    event.getWhoClicked().setItemOnCursor(ingredientMinusOne);
                                 }
-                            }, 1L);
+                            }, 0L);
                         }
                     }
                 } else {
                     // Swap cursor with existing ingredient.
-                    BukkitScheduler scheduler = getServer().getScheduler();
-                    scheduler.scheduleSyncDelayedTask(this, new Runnable() {
-                        @SuppressWarnings("deprecation")
+                    getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
                         @Override
                         public void run() {
                             brewingStand.setIngredient(insertIngredient);
-                            event.setCursor(existingIngredient);
+                            event.getWhoClicked().setItemOnCursor(existingIngredient);
                         }
-                    }, 1L);
+                    }, 0L);
                 }
                 cancel = true;
             }
@@ -1342,14 +1786,12 @@ public class main extends JavaPlugin implements Listener {
                     ItemStack ingredientMinusOne = insertIngredient.clone();
                     ingredientMinusOne.setAmount(insertIngredient.getAmount() - 1);
 
-                    BukkitScheduler scheduler = getServer().getScheduler();
-                    scheduler.scheduleSyncDelayedTask(this, new Runnable() {
-                        @SuppressWarnings("deprecation")
+                    getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
                         @Override
                         public void run() {
-                            event.setCursor(ingredientMinusOne);
+                            event.getWhoClicked().setItemOnCursor(ingredientMinusOne);
                         }
-                    }, 1L);
+                    }, 0L);
                 } else if (existingIngredient.getType().equals(insertIngredient.getType())) {
                     // Ingredient slot matches, insert single item.
                     int resultantStackSize = existingIngredient.getAmount() + 1;
@@ -1362,15 +1804,13 @@ public class main extends JavaPlugin implements Listener {
                         ItemStack ingredientMinusOne = insertIngredient.clone();
                         ingredientMinusOne.setAmount(insertIngredient.getAmount() - 1);
 
-                        BukkitScheduler scheduler = getServer().getScheduler();
-                        scheduler.scheduleSyncDelayedTask(this, new Runnable() {
-                            @SuppressWarnings("deprecation")
+                        getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
                             @Override
                             public void run() {
                                 brewingStand.setIngredient(toInsert);
-                                event.setCursor(ingredientMinusOne);
+                                event.getWhoClicked().setItemOnCursor(ingredientMinusOne);
                             }
-                        }, 1L);
+                        }, 0L);
                     }
                 }
                 cancel = true;
@@ -1382,45 +1822,26 @@ public class main extends JavaPlugin implements Listener {
             event.setCancelled(true);
         }
 
-        BukkitScheduler scheduler = getServer().getScheduler();
-        scheduler.scheduleSyncDelayedTask(this, new Runnable() {
+        getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
             @Override
             public void run() {
                 ((Player)event.getWhoClicked()).updateInventory();
             }
         }, 2L);
-        /*if (event.getClick().isLeftClick() && event.getClick().isShiftClick()) {
-            ItemStack inBrewingStand = event.getCurrentItem();
-            ItemStack cursor = event.getCursor();
-            if (cursor == null || cursor.getType() == Material.AIR) {
-                return;
-            } else if (inBrewingStand == null) {
-                event.getClickedInventory().setItem(event.getSlot(), cursor);
-            } else if (cursor.isSimilar(inBrewingStand)) {
-                ItemStack newBrewingStand = inBrewingStand.clone();
-                newBrewingStand.setAmount(Math.max(inBrewingStand.getAmount() + cursor.getAmount(), inBrewingStand.getMaxStackSize()));
-                event.getClickedInventory().setItem(event.getSlot(), newBrewingStand);
-
-                ItemStack newCursor = cursor.clone();
-                newCursor.setAmount();
-                event.setCursor(newCursor);
-
-            }
-        }*/
-
     }
 
     @EventHandler
-    public void clickGUI(InventoryClickEvent event) throws CloneNotSupportedException {
+    public void clickGUI(InventoryClickEvent event) {
         Inventory inventory = event.getClickedInventory();
         ItemStack clicked = event.getCurrentItem();
+        // TODO prevent placing in the custom inventories, including dragging
 
         // Fails if:
         // - clicked is an invalid item
         // - inventory is not the custom 54-slot and not the custom anvil
         // Succeeds if:
         // - clicked is valid AND inventory is the custom 54-slot
-        // - clicked is valid AND inventory is not the custom 54-slot BUT is the custom anvil AND is on the right slot
+        // - clicked is valid AND inventory is not the custom 54-slot BUT is the custom anvil
         if (clicked == null || clicked.getItemMeta() == null || inventory == null) {
             return;
         } else if (inventory == inv) {
@@ -1429,35 +1850,311 @@ public class main extends JavaPlugin implements Listener {
             return;
         }
 
+        String localizedName = clicked.getItemMeta().getLocalizedName();
 
         event.setCancelled(true);
-        if (!isPotionClick(clicked.getItemMeta().getLocalizedName())) return;
-        if (inventory != inv && anvilInv != null && event.getSlot() != AnvilGUI.Slot.OUTPUT) return;
-
-        this.log.info(clicked.getItemMeta().getLocalizedName());
-
-        if (clicked.getType() == Material.RED_STAINED_GLASS_PANE) {
+        if (!isPotionClick(localizedName)) {
+            this.log.warning("Unknown error X1.");
             return;
         }
-
-        if ((new PotionClick(clicked.getItemMeta().getLocalizedName())).getClick().equals("exit")) {
-            ((Player) event.getWhoClicked()).closeInventory();
-            return;
-        } else if (anvilInv != null) {
-            anvilInv.closeInventory();
-        }
+        this.isInvOpened = false;
 
         boolean isPotion = clicked.getType() == Material.POTION || clicked.getType() == Material.SPLASH_POTION
                 || clicked.getType() == Material.LINGERING_POTION;
-        boolean isSelectPage = new PotionClick(clicked.getItemMeta().getLocalizedName()).getClick().equalsIgnoreCase("select");
+        boolean isSelectPage = getClick(localizedName).equals("select");
+        boolean isLingeringPotion = clicked.getType() == Material.LINGERING_POTION;
 
-        if (isPotion) {
-            playerModifyPotions((Player) event.getWhoClicked(), clicked, clicked);
-        } else if (isSelectPage) {
-            playerModifyPotions((Player) event.getWhoClicked(), null, clicked);
+        if (inventory == inv || inventory.toString().equals(inv.toString())) {
+            // 54-slot inventory.
+
+            // TODO optimise these clicks..... each one should end in its own return.
+
+            // Invalid attempt to change page (red glass).
+            if (clicked.getType() == Material.RED_STAINED_GLASS_PANE && getPage(localizedName) == REDSTAINEDGLASSNUMBER) {
+                this.isInvOpened = true;
+                return;
+            }
+
+            // Leave via slot 53 exit.
+            if (getClick(localizedName).equals("exit")) {
+                if (clicked.getType() == Material.BARRIER || event.getClick() == ClickType.RIGHT) {
+                    event.getWhoClicked().closeInventory();
+                    event.getWhoClicked().sendMessage(ChatColor.RED + "Your changes have not been saved.");
+                    resetGlobals();
+                } else if (event.getClick() == ClickType.LEFT) {
+                    // TODO save the existing data, use isCompletePotion
+                    event.getWhoClicked().closeInventory();
+                    event.getWhoClicked().sendMessage(ChatColor.RED + "Your changes have not been saved.");
+                    resetGlobals();
+                }
+                return;
+            }
+
+            // On select menu, existing potion name is set to the clicked name.
+            if (getClick(localizedName).equals("type") && isPotion) this.potionNameInput = ChatColor.stripColor(clicked.getItemMeta().getDisplayName());
+
+            // Must be on effect_type menu, set the global to the type.
+            if (getClick(localizedName).equals("effect_dur")) this.effectTypeInput = ChatColor.stripColor(clicked.getItemMeta().getDisplayName());
+
+            // On effect_type menu, either modify or remove effect.
+            if (getClick(localizedName).equals("mixed")) {
+                this.isInvOpened = true;
+                if (event.getClick() == ClickType.LEFT) { // Modify.
+                    this.effectTypeInput = ChatColor.stripColor(clicked.getItemMeta().getDisplayName());
+                    ItemMeta modifyMeta = clicked.getItemMeta();
+                    modifyMeta.setLocalizedName(setClick(localizedName, "effect_dur"));
+                    clicked.setItemMeta(modifyMeta);
+                    playerModifyPotions((Player) event.getWhoClicked(), clicked, clicked);
+                } else if (event.getClick() == ClickType.RIGHT) { // Remove
+                    PotionMeta removeMeta = ((PotionMeta) clicked.getItemMeta());
+                    removeMeta.removeCustomEffect(PotionEffectType.getByName(ChatColor.stripColor(removeMeta.getDisplayName())));
+
+                    /*// If the potion has no effects as a result of the removal, go to ingredient menu.
+                    if (!removeMeta.hasCustomEffects()) {
+                        removeMeta.setLocalizedName(setClick(localizedName, "ingredient"));
+                    } else {
+                        removeMeta.setLocalizedName(setClick(localizedName, "effect_type"));
+                    }*/
+
+                    removeMeta.setLocalizedName(setClick(localizedName, "effect_type"));
+                    clicked.setItemMeta(removeMeta);
+                    playerModifyPotions((Player) event.getWhoClicked(), clicked, clicked);
+                }
+                return;
+            }
+
+            // No Effects selected in effect_type menu.
+            if (getClick(localizedName).equals("no_effects")) {
+                PotionMeta removeMeta = ((PotionMeta) clicked.getItemMeta());
+                removeMeta.clearCustomEffects();
+                removeMeta.setLocalizedName(setClick(localizedName, "ingredient"));
+                clicked.setItemMeta(removeMeta);
+                playerModifyPotions((Player) event.getWhoClicked(), clicked, clicked);
+                return;
+            }
+
+            // On ingredients menu, having selected a material as an ingredient.
+            if (getClick(localizedName).equals("ingredient_chosen")) {
+                this.ingredientInput = clicked.getType();
+                ItemMeta chosenMeta = clicked.getItemMeta();
+                chosenMeta.setLocalizedName(setClick(localizedName, "predecessor"));
+                clicked.setItemMeta(chosenMeta);
+                playerModifyPotions((Player) event.getWhoClicked(), inventory.getContents()[53], clicked);
+                return;
+            }
+
+            // On predecessor menu, having opted to return to the ingredient menu.
+            if (getClick(localizedName).equals("previous_menu_ingredient")) {
+                this.ingredientInput = null;
+                ItemMeta newRecipeMeta = clicked.getItemMeta();
+                newRecipeMeta.setLocalizedName(setClick(localizedName, "ingredient"));
+                clicked.setItemMeta(newRecipeMeta);
+                playerModifyPotions((Player) event.getWhoClicked(), inventory.getContents()[53], clicked);
+                return;
+            }
+
+            // On predecessor menu, having selected a potion as a predecessor.
+            if (getClick(localizedName).equals("ingredient") && isPotion) {
+                ItemMeta newRecipeMeta = clicked.getItemMeta();
+                newRecipeMeta.setLocalizedName(setRecipe(localizedName, true));
+                clicked.setItemMeta(newRecipeMeta);
+                ItemStack chosenPredecessor = clicked.clone();
+                newRecipeMeta.setLocalizedName(null);
+                newRecipeMeta.setDisplayName(ChatColor.stripColor(newRecipeMeta.getDisplayName()));
+                newRecipeMeta.setLore(null);
+                chosenPredecessor.setItemMeta(newRecipeMeta);
+                this.potionRecipesInput.add(new PotionRecipe(chosenPredecessor, ingredientInput));
+                this.ingredientInput = null;
+                playerModifyPotions((Player) event.getWhoClicked(), inventory.getContents()[53], clicked);
+                return;
+            }
+
+            // Adding newly created / modified potion to potions.yml.
+            // TODO remove old name potion ooo this would be how you can remove a potion itself from predecessor
+            if (getClick(localizedName).equals("complete")) {
+                String newName = ChatColor.stripColor(clicked.getItemMeta().getDisplayName());
+                PotionMeta newMeta = ((PotionMeta) clicked.getItemMeta());
+                Color newColor = newMeta.getColor();
+                boolean isLingering = clicked.getType() == Material.LINGERING_POTION;
+
+                // Type + Colour.
+                potionData.getData().set(newName + ".type", clicked.getType().toString().toUpperCase());
+                potionData.getData().set(newName + ".colour.name", colourNameFromColor(newColor));
+                potionData.getData().set(newName + ".colour.red", newColor.getRed());
+                potionData.getData().set(newName + ".colour.green", newColor.getGreen());
+                potionData.getData().set(newName + ".colour.blue", newColor.getBlue());
+
+                // Effects.
+                if (newMeta.hasCustomEffects()) {
+                    List<PotionEffect> newPotionEffects = newMeta.getCustomEffects();
+                    for (PotionEffect newPotionEffect : newPotionEffects) {
+                        String s = newName + ".effects." + newPotionEffect.getType().getName();
+                        potionData.getData().set(s + ".duration",
+                                isLingering ? newPotionEffect.getDuration() / 80 : newPotionEffect.getDuration() / 20);
+                        potionData.getData().set(s + ".amplifier", newPotionEffect.getAmplifier());
+                    }
+                } else {
+                    potionData.getData().set(newName + ".effects", "none");
+                }
+
+                // Predecessors.
+                for (PotionRecipe newPotionRecipe : this.potionRecipesInput) {
+                    PotionMeta preMeta = ((PotionMeta) newPotionRecipe.predecessor.getItemMeta());
+                    boolean isPreLingering = newPotionRecipe.predecessor.getType() == Material.LINGERING_POTION;
+                    String s = newName + ".predecessors." + elementaryName(preMeta);
+                    potionData.getData().set(s + ".type", newPotionRecipe.predecessor.getType().name().toUpperCase());
+                    if (preMeta.hasCustomEffects()) {
+                        List<PotionEffect> prePotionEffects = preMeta.getCustomEffects();
+                        for (PotionEffect prePotionEffect : prePotionEffects) {
+                            String t = s + ".effects." + prePotionEffect.getType().getName();
+                            potionData.getData().set(t + ".duration",
+                                    isPreLingering ? prePotionEffect.getDuration() / 80 : prePotionEffect.getDuration() / 20);
+                            potionData.getData().set(t + ".amplifier", prePotionEffect.getAmplifier());
+                        }
+                    } else {
+                        potionData.getData().set(s + ".effects", "none");
+                    }
+                    potionData.getData().set(s + ".ingredient", newPotionRecipe.ingredient.name());
+                }
+
+                potionData.saveData();
+                // TODO add to allCustomPotions
+                resetGlobals();
+
+                event.getWhoClicked().closeInventory();
+                event.getWhoClicked().sendMessage(ChatColor.GREEN + "Your changes to " + newName + " have been saved.");
+                return;
+            }
+
+            // continue to end
+
         } else {
-            playerModifyPotions((Player) event.getWhoClicked(), inventory.getContents()[53], clicked);
+            // Anvil inventory.
+
+            // Not the output slot. anvilInv remains unchanged.
+            if (event.getSlot() != AnvilGUI.Slot.OUTPUT) {
+                this.isInvOpened = true;
+                return;
+            }
+
+            // Clicking the output slot.
+            if (getClick(localizedName).equals("effect_amp") || getClick(localizedName).equals("effect_type")) {
+                if (event.getClick() == ClickType.RIGHT) { // Right click (exit).
+                    anvilInv.closeInventory();
+                    event.getWhoClicked().sendMessage(ChatColor.RED + "Your changes have not been saved.");
+                    resetGlobals();
+                    return;
+                } else if (event.getClick() == ClickType.LEFT) { // Left click.
+                    if (getClick(localizedName).equals("effect_amp")) { // Currently using effect_dur menu.
+                        effectDurationInput = clicked.getItemMeta().getDisplayName();
+                        int dur;
+                        try {
+                            dur = Integer.parseInt(effectDurationInput);
+                        } catch (Exception e) { // Not an integer.
+                            this.isInvOpened = true;
+                            effectDurationInput = null;
+                            return;
+                        }
+
+                        this.log.info(localizedName);
+                        this.log.info("type: " + (effectTypeInput));
+                        this.log.info("dur: " + (effectDurationInput));
+                        this.log.info("amp: " + (effectAmplifierInput));
+                        this.log.info("name: " + (potionNameInput));
+
+                        this.isInvOpened = true;
+                        if (dur < 1 || dur > 26843545) { // Not in range.
+                            effectDurationInput = null;
+                        } else { // effectDurationInput is valid.
+                            playerModifyPotions((Player) event.getWhoClicked(), clicked, clicked);
+                        }
+                        return;
+                    } else { // Currently on effect_amp menu.
+                        effectAmplifierInput = clicked.getItemMeta().getDisplayName();
+                        int amp;
+                        try {
+                            amp = Integer.parseInt(effectAmplifierInput);
+                        } catch (Exception e) { // Not an integer.
+                            this.isInvOpened = true;
+                            effectAmplifierInput = null;
+                            return;
+                        }
+
+                        this.log.info(localizedName);
+                        this.log.info("type: " + (effectTypeInput));
+                        this.log.info("dur: " + (effectDurationInput));
+                        this.log.info("amp: " + (effectAmplifierInput));
+                        this.log.info("name: " + (potionNameInput));
+
+                        this.isInvOpened = true;
+                        if (amp < 0 || amp > 127) { // Not in range.
+                            effectAmplifierInput = null;
+                        } else {
+                            PotionMeta newEffectMeta = ((PotionMeta) clicked.getItemMeta());
+                            PotionEffectType newType = PotionEffectType.getByName(effectTypeInput);
+                            int newDur = isLingeringPotion ? Integer.parseInt(effectDurationInput) * 80: Integer.parseInt(effectDurationInput) * 20;
+                            int newAmp = Integer.parseInt(effectAmplifierInput);
+                            newEffectMeta.addCustomEffect(new PotionEffect(newType, newDur, newAmp), true);
+                            newEffectMeta.setLocalizedName(setEffect(localizedName, true));
+                            clicked.setItemMeta(newEffectMeta);
+                            effectTypeInput = null;
+                            effectDurationInput = null;
+                            effectAmplifierInput = null;
+                            playerModifyPotions((Player) event.getWhoClicked(), clicked, clicked);
+                        }
+                        return;
+                    }
+                } else { // Any other click (invalid here).
+                    this.isInvOpened = true;
+                    return;
+                }
+            } else if (getClick(localizedName).equals("final")) {
+                if (event.getClick() == ClickType.RIGHT) { // Right click (exit).
+                    anvilInv.closeInventory();
+                    event.getWhoClicked().sendMessage(ChatColor.RED + "Your changes have not been saved.");
+                    resetGlobals();
+                    return;
+                } else if (event.getClick() == ClickType.LEFT) { // Left click.
+                    potionNameInput = ChatColor.stripColor(clicked.getItemMeta().getDisplayName());
+
+                    this.log.info(localizedName);
+                    this.log.info("type: " + (effectTypeInput));
+                    this.log.info("dur: " + (effectDurationInput));
+                    this.log.info("amp: " + (effectAmplifierInput));
+                    this.log.info("name: " + (potionNameInput));
+
+                    this.isInvOpened = true;
+                    PotionMeta namedMeta = ((PotionMeta) clicked.getItemMeta());
+                    namedMeta.setLocalizedName(setName(localizedName, true));
+                    namedMeta.setDisplayName(potionNameInput);
+                    clicked.setItemMeta(namedMeta);
+                    playerModifyPotions((Player) event.getWhoClicked(), clicked, clicked);
+                    return;
+                } else { // Any other click (invalid here).
+                    this.isInvOpened = true;
+                    return;
+                }
+            } else {
+                this.log.warning("Unknown error X2.");
+            }
         }
 
+        this.log.info(localizedName);
+        this.log.info("type: " + (effectTypeInput));
+        this.log.info("dur: " + (effectDurationInput));
+        this.log.info("amp: " + (effectAmplifierInput));
+        this.log.info("name: " + (potionNameInput));
+
+        // Continued to end (GUI was not exited).
+        this.isInvOpened = true;
+
+        if (isPotion) { // Pass the potion that was just clicked.
+            playerModifyPotions((Player) event.getWhoClicked(), clicked, clicked);
+        } else if (isSelectPage) { // Pass null so the localized names are reinitialised.
+            playerModifyPotions((Player) event.getWhoClicked(), null, clicked);
+        } else { // Pass the potion which will be in the bottom right hand corner.
+            playerModifyPotions((Player) event.getWhoClicked(), inventory.getContents()[53], clicked);
+        }
     }
+
 }

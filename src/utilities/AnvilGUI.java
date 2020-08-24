@@ -5,9 +5,13 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.InventoryAction;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -197,7 +201,7 @@ public class AnvilGUI {
      */
     private class ListenUp implements Listener {
 
-        /*@EventHandler
+        @EventHandler(priority = EventPriority.LOW)
         public void onInventoryClick(InventoryClickEvent event) {
             if (
                     event.getInventory().equals(inventory) && (
@@ -213,7 +217,7 @@ public class AnvilGUI {
                     if (clicked == null || clicked.getType() == Material.AIR) return;
 
                     final Response response = completeFunction.apply(clicker, clicked.hasItemMeta() ? clicked.getItemMeta().getDisplayName() : "");
-                    if(response.getText() != null) {
+                    if (response.getText() != null) {
                         final ItemMeta meta = clicked.getItemMeta();
                         meta.setDisplayName(response.getText());
                         clicked.setItemMeta(meta);
@@ -235,7 +239,7 @@ public class AnvilGUI {
                     }
                 }
             }
-        }*/
+        }
 
         @EventHandler
         public void onInventoryClose(InventoryCloseEvent event) {
