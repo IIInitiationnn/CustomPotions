@@ -144,12 +144,12 @@ public class commands implements CommandExecutor {
                 return false;
             }
 
-            if (args.length != 3) {
-                sender.sendMessage(ChatColor.RED + "Usage: /" + label + " give <potion> <quantity>");
+            if (args.length != 1) {
+                sender.sendMessage(ChatColor.RED + "Usage: /" + label + " give");
                 return false;
             }
 
-            return !pluginInstance.givePotions(sender, args[1], args[2]);
+            return !pluginInstance.givePotions((Player) sender, null);
         }
 
         // INVALID COMMAND

@@ -11,6 +11,7 @@ Tested with Spigot 1.16.1.
 - Commands called using `/custompotions` or its alias `/cp`.
 - Changes to the configuration file `config.yml` or potion data file `potions.yml` loaded using `/cp reload`.
 - Potions can be easily cloned by making copies in the potion data file `potions.yml` and reloading the plugin.
+- GUI uses localized names in the itemstack metadata, which could potentially conflict with other mods, plugins or non-Vanilla configurations.
 
 ### Data
 - `potions.yml` stores:
@@ -26,7 +27,8 @@ Tested with Spigot 1.16.1.
 - Full flexibility over choice of predecessor with the following caveats:
     - Predecessor must be an existing Vanilla or custom potion.
     - No two potions with the same predecessor can have the same ingredient corresponding with that predecessor.
-    - ~~Predecessor can be assigned to be the potion itself (we let you handle the redundancy).~~
+- Allows customised formatting of the potion name using the codes from
+    [here](https://minecraft.gamepedia.com/Formatting_codes) with the symbol &.
 
 ### Issues
 - Converting potions from drinkable / splash to lingering will divide effect durations by 4. Similarly, converting from
@@ -46,7 +48,7 @@ manually re-enter all durations with the appropriate factor of 4, simply change 
 | `cp list` | Displays all custom potions. | `custompotions.brew` |
 | `cp reload` | Reloads the config and plugin. | `custompotions.reload` |
 | `cp modify` |  Allows you to edit and create new potions with custom effects. | `custompotions.modify` |
-| `cp give <potion> <quantity>` | Allows you to withdraw a quantity of a custom potion. | `custompotions.modify` |
+| `cp give` | Allows you to withdraw a quantity of a custom potion. | `custompotions.modify` |
 ### Permissions
 | Permission | Description | Default |
 | ---------- | ----------- | ------- |
