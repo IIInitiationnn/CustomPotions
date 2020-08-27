@@ -119,6 +119,11 @@ public class commands implements CommandExecutor {
                 return false;
             }
 
+            if (!(sender instanceof Player)) {
+                sender.sendMessage(ChatColor.DARK_RED + "Only players can use this command.");
+                return false;
+            }
+
             if (args.length != 1) {
                 sender.sendMessage(ChatColor.RED + "Usage: /" + label + " modify");
                 return false;
