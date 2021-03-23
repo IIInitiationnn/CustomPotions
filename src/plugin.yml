@@ -1,8 +1,8 @@
 name: CustomPotions
 author: IIInitiationnn
-main: custompotions.main
+main: xyz.iiinitiationnn.custompotions.Main
 version: 1.0
-api-version: 1.16
+api-version: 1.13
 
 commands:
   custompotions:
