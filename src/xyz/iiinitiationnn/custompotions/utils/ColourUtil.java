@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Random;
 
 public class ColourUtil {
-
     /**
      * Selects a random default potion Colour.
      */
@@ -26,7 +25,25 @@ public class ColourUtil {
      * Returns a List of all default potion Colours which can be selected from in the potionColour menu.
      */
     public static List<Colour> defaultPotionColourList() {
-        return new ArrayList<>(defaultPotionColourMap().values());
+        List<Colour> colours = new ArrayList<>();
+        colours.add(new Colour(0xFF, 0x00, 0x00));
+        colours.add(new Colour(0xFF, 0xA5, 0x00));
+        colours.add(new Colour(0xFF, 0xFF, 0x00));
+        colours.add(new Colour(0x80, 0x80, 0x00));
+        colours.add(new Colour(0x00, 0xFF, 0x00));
+        colours.add(new Colour(0x00, 0x80, 0x00));
+        colours.add(new Colour(0x00, 0x80, 0x80));
+        colours.add(new Colour(0x00, 0xFF, 0xFF));
+        colours.add(new Colour(0xFF, 0x00, 0xFF));
+        colours.add(new Colour(0x80, 0x00, 0x00));
+        colours.add(new Colour(0x80, 0x00, 0x80));
+        colours.add(new Colour(0x00, 0x00, 0xFF));
+        colours.add(new Colour(0x00, 0x00, 0x80));
+        colours.add(new Colour(0xFF, 0xFF, 0xFF));
+        colours.add(new Colour(0xC0, 0xC0, 0xC0));
+        colours.add(new Colour(0x80, 0x80, 0x80));
+        colours.add(new Colour(0x00, 0x00, 0x00));
+        return colours;
     }
 
     /**

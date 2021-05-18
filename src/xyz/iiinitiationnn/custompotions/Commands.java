@@ -5,170 +5,141 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-
-import static xyz.iiinitiationnn.custompotions.PotionObject.debugCustomPotions;
-import static xyz.iiinitiationnn.custompotions.PotionReader.getCustomPotions;
-import static xyz.iiinitiationnn.custompotions.utils.ColourUtil.getChatColor;
+import org.jetbrains.annotations.NotNull;
+import xyz.iiinitiationnn.custompotions.utils.ColourUtil;
 
 public class Commands implements CommandExecutor {
-    // Plugin instance.
-    private Main pluginInstance;
+    private final Main pluginInstance;
 
-    Commands(Main pluginInstance) {
+    public Commands(Main pluginInstance) {
         this.pluginInstance = pluginInstance;
     }
 
-    public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command cmd, String label, String[] args) {
+        // Not a CP command
         if (!label.equalsIgnoreCase("custompotions") && !label.equalsIgnoreCase("cp")) {
             return false;
         }
 
-        // Display help prompt with available CP commands.
+        // Display help prompt with available commands
         if (args.length == 0) {
-            if (!sender.hasPermission("custompotions.reload") && !sender.hasPermission("custompotions.modify") && !sender.hasPermission("custompotions.brew")) {
-                sender.sendMessage(ChatColor.DARK_RED + "You do not have permission to run this command.");
-                pluginInstance.permissionDenied(sender);
-                return false;
+            // Insufficient permissions
+            if (!sender.hasPermission("custompotions.reload") && !sender.hasPermission("custompotions.modify") &&
+                    !sender.hasPermission("custompotions.brew")) {
+                return pluginInstance.permissionDenied(sender);
             }
+
             sender.sendMessage(ChatColor.GOLD + "CustomPotions commands you have access to:");
-            if (sender.hasPermission("custompotions.reload")) {
-                sender.sendMessage(ChatColor.GOLD + "/" + label + " reload" + ChatColor.WHITE + ": reloads the config and plugin.");
-            }
-            if (sender.hasPermission("custompotions.modify")) {
-                sender.sendMessage(ChatColor.GOLD + "/" + label + " modify" + ChatColor.WHITE + ": allows you to edit and create new potions with custom effects.");
-                sender.sendMessage(ChatColor.GOLD + "/" + label + " give" + ChatColor.WHITE + ": allows you to withdraw a custom potion.");
-            }
-            if (sender.hasPermission("custompotions.brew")) {
-                sender.sendMessage(ChatColor.GOLD + "/" + label + " info <potion>" + ChatColor.WHITE + ": displays all information about the potion.");
-                sender.sendMessage(ChatColor.GOLD + "/" + label + " list" + ChatColor.WHITE + ": displays all custom potions.");
-            }
-            return false;
+            String prefix = ChatColor.GOLD + "/" + label;
+            if (sender.hasPermission("custompotions.reload"))
+                sender.sendMessage(prefix + " reload" + ChatColor.WHITE + ": reloads the config and plugin.");
+            if (sender.hasPermission("custompotions.modify"))
+                sender.sendMessage(prefix + " modify" + ChatColor.WHITE + ": allows you to edit and create new potions with custom effects.");
+                sender.sendMessage(prefix + " give" + ChatColor.WHITE + ": allows you to withdraw a custom potion.");
+            if (sender.hasPermission("custompotions.brew"))
+                sender.sendMessage(prefix + " info" + ChatColor.WHITE + ": displays information about all custom potions.");
+            return true;
         }
 
-        /***************************************************************************************************************
-        *                                                     INFO                                                     *
-        ***************************************************************************************************************/
-
+        // Info for all potions
         if (args[0].equalsIgnoreCase("info")) {
-            // pluginInstance.getLogger().info("inv is opened: " + pluginInstance.isInvOpened);
-            // TODO: for console, display all information. for player, open GUI with the potion
+            // TODO: for console, display all information. for player, open GUI with the potion, clicking it brings up a brewing stand GUI
+            //  which rotates through all the recipes (1 per 2 seconds?) maybe clicking on potions in this menu will show how they can be brewed
+            //  and clicking on the item will take you back
 
+            // Insufficient permissions
             if (!sender.hasPermission("custompotions.brew")) {
-                sender.sendMessage(ChatColor.DARK_RED + "You do not have permission to run this command.");
-                pluginInstance.permissionDenied(sender);
-                return false;
+                return pluginInstance.permissionDenied(sender);
             }
 
-            if (args.length != 2) {
-                sender.sendMessage(ChatColor.RED + "Usage: /" + label + " info <potion>");
-                return false;
-            }
-
-            sender.sendMessage(ChatColor.GOLD + "TO BE IMPLEMENTED");
-            return true;
-            //return !pluginInstance.info(sender, args[1].toUpperCase());
-        }
-
-        /***************************************************************************************************************
-        *                                                     LIST                                                     *
-        ***************************************************************************************************************/
-
-        // TODO: for console: ???? for player, they get a gui for info (could even just call info)
-        else if (args[0].equalsIgnoreCase("list")) {
-            if (!sender.hasPermission("custompotions.brew")) {
-                sender.sendMessage(ChatColor.DARK_RED + "You do not have permission to run this command.");
-                pluginInstance.permissionDenied(sender);
-                return false;
-            }
-
+            // Incorrect usage
             if (args.length != 1) {
-                sender.sendMessage(ChatColor.RED + "Usage: /" + label + " list");
+                sender.sendMessage(ChatColor.RED + "Usage: /" + label + " info");
                 return false;
             }
 
-            //pluginInstance.list(sender);
             sender.sendMessage(ChatColor.GOLD + "TO BE IMPLEMENTED");
             return true;
         }
 
-        /***************************************************************************************************************
-        *                                                    RELOAD                                                    *
-        ***************************************************************************************************************/
-
+        // Reloads plugin
         else if (args[0].equalsIgnoreCase("reload")) {
+            // Insufficient permissions
             if (!sender.hasPermission("custompotions.reload")) {
-                sender.sendMessage(ChatColor.DARK_RED + "You do not have permission to run this command.");
-                pluginInstance.permissionDenied(sender);
-                return false;
+                return pluginInstance.permissionDenied(sender);
             }
 
+            // Incorrect usage
             if (args.length != 1) {
                 sender.sendMessage(ChatColor.RED + "Usage: /" + label + " reload");
                 return false;
             }
+
             pluginInstance.reload();
             sender.sendMessage(ChatColor.GREEN + "CustomPotions has been successfully reloaded.");
             return true;
 
         }
 
-        /***************************************************************************************************************
-        *                                                    MODIFY                                                    *
-        ***************************************************************************************************************/
-
+        // Modify or create new potions
         else if (args[0].equalsIgnoreCase("modify")) {
+            // Insufficient permissions
             if (!sender.hasPermission("custompotions.modify")) {
-                sender.sendMessage(ChatColor.DARK_RED + "You do not have permission to run this command.");
-                pluginInstance.permissionDenied(sender);
-                return false;
+                return pluginInstance.permissionDenied(sender);
             }
 
+            // Not a player
             if (!(sender instanceof Player)) {
                 sender.sendMessage(ChatColor.DARK_RED + "Only players can use this command.");
                 return false;
             }
 
+            // Incorrect usage
             if (args.length != 1) {
                 sender.sendMessage(ChatColor.RED + "Usage: /" + label + " modify");
                 return false;
             }
 
-            return true; //!pluginInstance.modifyPotions(sender);
+            InventoryGUI next = new InventoryGUI();
+            next.openInv(sender);
 
+            sender.sendMessage(ChatColor.GOLD + "TO BE IMPLEMENTED");
+            return true;
         }
 
-        /***************************************************************************************************************
-        *                                                     GIVE                                                     *
-        ***************************************************************************************************************/
-
-        else if (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("test")) {
-            getCustomPotions().get(0).debugCustomPotion();
-            getChatColor(getCustomPotions().get(0).getPotion());
-
+        // Give potions to player
+        else if (args[0].equalsIgnoreCase("give")) {
+            // Insufficient permissions
             if (!sender.hasPermission("custompotions.modify")) {
-                sender.sendMessage(ChatColor.DARK_RED + "You do not have permission to run this command.");
-                pluginInstance.permissionDenied(sender);
-                return false;
+                return pluginInstance.permissionDenied(sender);
             }
 
+            // Not a player
             if (!(sender instanceof Player)) {
                 sender.sendMessage(ChatColor.DARK_RED + "Only players can use this command.");
                 return false;
             }
 
+            // Incorrect usage
             if (args.length != 1) {
                 sender.sendMessage(ChatColor.RED + "Usage: /" + label + " give");
                 return false;
             }
-            return true; //!pluginInstance.givePotions((Player) sender, null);
+
+            sender.sendMessage(ChatColor.GOLD + "TO BE IMPLEMENTED");
+            return true;
         }
 
-        // INVALID COMMAND
+        // Debug
+        else if (args[0].equalsIgnoreCase("debug")) {
+            PotionObject.debugCustomPotions();
+            return true;
+        }
+
+        // Invalid command
         else {
             sender.sendMessage(ChatColor.RED + "/" + label + " " + args[0] + " is not a valid command.");
             return false;
         }
-
     }
-
 }

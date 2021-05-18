@@ -115,9 +115,8 @@ public class Colour {
 
     public Colour closestMatchFromList(List<Colour> colours) {
         colours.sort((Colour a, Colour b) -> this.dist(a) >= this.dist(b) ? 1 : -1);
-        for (Colour c : colours) {
-            Main.log.info(ColourUtil.colourChatColorMap().get(c) + String.format("%d, %d, %d", c.r, c.g, c.b));
-        }
+        /*for (Colour c : colours)
+            Main.log.info(ColourUtil.colourChatColorMap().get(c) + String.format("%d, %d, %d", c.r, c.g, c.b));*/
         return colours.get(0);
     }
 

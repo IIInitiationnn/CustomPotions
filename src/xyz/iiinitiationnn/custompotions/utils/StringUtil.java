@@ -1,9 +1,6 @@
 package xyz.iiinitiationnn.custompotions.utils;
 
-import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.WordUtils;
-
-import java.util.Arrays;
 
 public class StringUtil {
 
@@ -11,7 +8,7 @@ public class StringUtil {
      * Capitalise string using title case and replace delimiter characters with spaces.
      */
     public static String titleCase(String s, String delimiter) {
-        return WordUtils.capitalizeFully(Arrays.toString(s.split(delimiter)));
+        return WordUtils.capitalizeFully(s.replace(delimiter, " "));
     }
 
     /**
@@ -33,6 +30,8 @@ public class StringUtil {
                 return "Strength";
             case "JUMP":
                 return "Jump Boost";
+            case "SLOW":
+                return "Slowness";
             case "SLOW_DIGGING":
                 return "Mining Fatigue";
             default:

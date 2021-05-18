@@ -4,21 +4,22 @@ import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class TabComplete implements TabCompleter {
-    List<String> arguments = new ArrayList<String>();
-    List<String> emptyList = new ArrayList<String>();
+    List<String> arguments = new ArrayList<>();
+    List<String> emptyList = new ArrayList<>();
 
-    private Main pluginInstance;
+    private final Main pluginInstance;
 
-    TabComplete(Main pluginInstance) {
+    public TabComplete(Main pluginInstance) {
         this.pluginInstance = pluginInstance;
     }
 
-    public List<String> onTabComplete(CommandSender sender, Command cmd, String label, String[] args) {
+    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command cmd, @NotNull String label, String[] args) {
         if (arguments.isEmpty()) {
             if (sender.hasPermission("custompotions.brew")) {
                 arguments.add("info");

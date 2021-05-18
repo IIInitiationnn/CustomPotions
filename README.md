@@ -46,14 +46,13 @@ without having to manually re-enter all durations with the appropriate factor of
 ### Commands
 | Command | Description | Permission |
 | ------- | ----------- | ---------- |
-| `cp info <potion>` | Displays all information about the potion. | `custompotions.brew` |
-| `cp list` | Displays all custom potions. | `custompotions.brew` |
+| `cp info` | Displays all custom potions. | `custompotions.brew` |
 | `cp reload` | Reloads the config and plugin. | `custompotions.reload` |
 | `cp modify` |  Allows you to edit and create new potions with custom effects. | `custompotions.modify` |
 | `cp give` | Allows you to withdraw a quantity of a custom potion. | `custompotions.modify` |
 ### Permissions
 | Permission | Description | Default |
 | ---------- | ----------- | ------- |
-| `custompotions.brew` | Permission to use `cp info` and `cp list`. | All |
+| `custompotions.brew` | Permission to use `cp info`. | All |
 | `custompotions.reload` | Permission to use `cp reload`. | Operator |
 | `custompotions.modify` | Permission to use `cp modify` and `cp give`. | Operator |
