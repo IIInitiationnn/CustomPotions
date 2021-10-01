@@ -1,5 +1,6 @@
 package xyz.iiinitiationnn.custompotions.utils;
 
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -43,10 +44,19 @@ public class ItemStackUtil {
     public static String getLocalizedName(ItemStack item) {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
-            Main.log.severe("There was an error retrieving the item metadata when setting the localized name.");
+            Main.log.severe("There was an error retrieving the item metadata when getting the localized name.");
             return "";
         }
         return meta.getLocalizedName();
+    }
+
+    public static String getDisplayName(ItemStack item) {
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            Main.log.severe("There was an error retrieving the item metadata when getting the display name.");
+            return "";
+        }
+        return ChatColor.stripColor(meta.getDisplayName());
     }
 
     /**

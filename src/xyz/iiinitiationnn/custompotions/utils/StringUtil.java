@@ -9,7 +9,7 @@ public class StringUtil {
      */
     public static String titleCase(String s, String delimiter) {
         return WordUtils.capitalizeFully(s.replace(delimiter, " "));
-    }
+    } // TODO bugged?
 
     /**
      * Given a potion effect's in-game name, return its common name.

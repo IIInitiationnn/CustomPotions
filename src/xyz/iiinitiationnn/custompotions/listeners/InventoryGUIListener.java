@@ -1,23 +1,26 @@
 package xyz.iiinitiationnn.custompotions.listeners;
 
-import org.bukkit.ChatColor;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.potion.PotionEffectType;
 import xyz.iiinitiationnn.custompotions.*;
 import org.bukkit.event.Listener;
 import xyz.iiinitiationnn.custompotions.utils.ItemStackUtil;
+import xyz.iiinitiationnn.custompotions.utils.MagicNumber;
+import xyz.iiinitiationnn.custompotions.utils.PotionUtil;
 
-import java.util.List;
+import java.io.IOException;
+import java.util.ArrayList;
 
 public class InventoryGUIListener implements Listener {
-    int EXISTING_POTION_SLOT = 53;
     // action: exit, skipL, skipR, pageNext, pagePrevious, pageInvalid, createPotion, selectPotion, selectType,
-    //         selectColour, addEffectType, selectEffectType, enterEffectDuration, enterEffectAmplifier,
+    //         selectColour, noEffects, addEffectType, selectEffectType, enterEffectDuration, enterEffectAmplifier,
     //         addRecipeIngredient, selectRecipeIngredient, addRecipeBase, removeRecipeBase, recipeBaseInvalid,
     //         enterName, finalInvalid, finalEdit, finalConfirm, give
 
@@ -27,72 +30,164 @@ public class InventoryGUIListener implements Listener {
         ItemStack interaction = event.getCurrentItem();
         Player player = (Player) event.getWhoClicked();
 
-        if (inv == null || interaction == null || interaction.getItemMeta() == null) return;
-        String localizedName = ItemStackUtil.getLocalizedName(interaction);
-        if (!LocalizedName.isCustomPotionsClick(localizedName)) return;
+        if (inv == null || interaction == null || interaction.getItemMeta() == null || event.getCurrentItem() == null) {
+            return;
+        }
+        State state;
+        try {
+            state = State.decodeFromString(ItemStackUtil.getLocalizedName(interaction));
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+            // Not a State class
+            // TODO may need to test if another class is encoded in the name but not a State e.g. diff plugin uses it
+            return;
+        }
+        Main.log.info(state.getAction() + " " + state.getMenu());
         // TODO prevent placing in the custom inventories, including dragging event
         //  is this covered by interaction == null? (for the placing part)
 
         event.setCancelled(true);
-
-        LocalizedName state = new LocalizedName(localizedName);
-        LocalizedName nextState = state.clone();
-        InventoryGUI next;
+        State nextState = state.clone();
         switch (state.getAction()) {
             case "exit":
                 // TODO
                 break;
             case "skipL":
-                nextState.previousMenu();
-                next = new InventoryGUI(nextState, new PotionObject(inv.getItem(EXISTING_POTION_SLOT)));
-                next.openInv(player);
+                nextState.skipPreviousMenu();
                 break;
             case "skipR":
-                nextState.nextMenu();
-                next = new InventoryGUI(nextState, new PotionObject(inv.getItem(EXISTING_POTION_SLOT)));
-                next.openInv(player);
+                nextState.skipNextMenu();
                 break;
             case "pageNext":
                 nextState.setPage(state.getPage() + 1);
-                next = new InventoryGUI(nextState, new PotionObject(inv.getItem(EXISTING_POTION_SLOT)));
-                next.openInv(player);
                 break;
             case "pagePrevious":
                 nextState.setPage(state.getPage() - 1);
-                next = new InventoryGUI(nextState, new PotionObject(inv.getItem(EXISTING_POTION_SLOT)));
-                next.openInv(player);
                 break;
             case "pageInvalid":
-                break;
+                return;
             case "createPotion":
-                nextState.nextMenu();
-                next = new InventoryGUI(nextState, new PotionObject(event.getCurrentItem()));
-                next.openInv(player);
-                break;
-            case "selectPotion":
-                switch (event.getClick()) {
-                    case LEFT: // modify
-                        nextState.nextMenu();
-                        new PotionObject(event.getCurrentItem()).debugCustomPotion();
-                        next = new InventoryGUI(nextState, new PotionObject(event.getCurrentItem()));
-                        next.openInv(player);
-                    case RIGHT: // remove
-                    case SHIFT_LEFT: // clone
-                }
-                break;
             case "selectType":
             case "selectColour":
                 nextState.nextMenu();
-                next = new InventoryGUI(nextState, new PotionObject(event.getCurrentItem()));
-                next.openInv(player);
+                break;
+            case "selectPotion":
+                if (event.getClick() == ClickType.LEFT) {
+                    // modify
+                    nextState.nextMenu();
+                    nextState.getPotion().debugCustomPotion(); // hhh
+                } else if (event.getClick() == ClickType.RIGHT) {
+                    // remove TODO
+                } else if (event.getClick() == ClickType.SHIFT_LEFT) {
+                    // clone
+                    nextState.nextMenu();
+                    nextState.setPotion(nextState.getPotion().duplicate());
+                    state.getPotion().debugCustomPotion(); // hhh
+                    nextState.getPotion().debugCustomPotion(); // hhh
+                }
+                break;
+            case "noEffects":
+                nextState.skipNextMenu();
+                nextState.getPotion().setEffects(new ArrayList<>());
                 break;
             case "addEffectType":
                 nextState.nextMenu();
-                nextState.setExtraField(event.getCurrentItem().getType().name());
-                next = new InventoryGUI(nextState, new PotionObject(event.getCurrentItem()));
-                next.openInv(player);
+                nextState.getInput().setEffectType(ItemStackUtil.getDisplayName(event.getCurrentItem()));
                 break;
+            case "selectEffectType":
+                if (event.getClick() == ClickType.LEFT) {
+                    // modify
+                    nextState.nextMenu();
+                    nextState.getInput().setEffectType(ItemStackUtil.getDisplayName(event.getCurrentItem()));
+                } else if (event.getClick() == ClickType.RIGHT) {
+                    // remove TODO
+                }
+                break;
+            case "enterEffectDuration":
+                if (event.getSlot() == MagicNumber.anvilLeftInputSlot) {
+                    // Skip
+                    nextState.skipNextMenu();
+                } else if (event.getSlot() == MagicNumber.anvilRightInputSlot) {
+                    // Invalid
+                     return;
+                } else if (event.getSlot() == MagicNumber.anvilOutputSlot) {
+                    // Continue
+                    try {
+                        int duration = Integer.parseInt(ItemStackUtil.getDisplayName(event.getCurrentItem()));
+                        if (PotionUtil.isValidDuration(state.getPotion().isLingering(), duration)) {
+                            nextState.nextMenu();
+                            int durationTicks = PotionUtil.secondsToTicks(state.getPotion().isLingering(), duration);
+                            nextState.getInput().setEffectDuration(durationTicks);
+
+                            // Effect only has one possible amplifier (I), add new effect to the potion
+                            if (PotionUtil.maxAmp(state.getInput().getEffectType()) == 0) {
+                                nextState.nextMenu();
+                                PotionEffectType type = PotionEffectType.getByName(state.getInput().getEffectType());
+                                nextState.getPotion().addEffect(new PotionEffectSerializable(type, durationTicks, 0));
+                                nextState.resetInput();
+                            }
+
+                        } else {
+                            throw new Exception();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+                break;
+            case "enterEffectAmplifier":
+                if (event.getSlot() == MagicNumber.anvilLeftInputSlot) {
+                    // Skip
+                    nextState.skipNextMenu();
+                } else if (event.getSlot() == MagicNumber.anvilRightInputSlot) {
+                    // Invalid
+                     return;
+                } else if (event.getSlot() == MagicNumber.anvilOutputSlot) {
+                    // Continue
+                    try {
+                        int amplifier = Integer.parseInt(ItemStackUtil.getDisplayName(event.getCurrentItem()));
+                        if (PotionUtil.isValidAmp(state.getInput().getEffectType(), amplifier)) {
+                            nextState.nextMenu();
+
+                            // Add the new effect to the potion
+                            PotionEffectType type = PotionEffectType.getByName(state.getInput().getEffectType());
+                            int duration = state.getInput().getEffectDuration();
+                            nextState.getPotion().addEffect(new PotionEffectSerializable(type, duration, amplifier - 1));
+                            nextState.resetInput();
+                        } else {
+                            throw new Exception();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+                break;
+            case "addRecipeIngredient":
+                nextState.nextMenu();
+                nextState.getInput().setMaterial(event.getCurrentItem().getType().name());
+                break;
+            case "selectRecipeIngredient":
+                if (event.getClick() == ClickType.LEFT) {
+                    // modify
+                    nextState.nextMenu();
+                    nextState.getInput().setMaterial(event.getCurrentItem().getType().name());
+                } else if (event.getClick() == ClickType.RIGHT) {
+                    // remove TODO
+                }
+            case "addRecipeBase":
+                nextState.nextMenu();
+                break;
+            case "removeRecipeBase":
+                nextState.nextMenu();
+                nextState.nextMenu();
+                break;
+            case "recipeBaseInvalid":
+                return;
+            case "enterName":
+            case "finalInvalid":
+            case "finalEdit":
+            case "finalConfirm":
+            case "give":
         }
+        (new InventoryGUI(nextState)).openInv(player);
 
     }
 }

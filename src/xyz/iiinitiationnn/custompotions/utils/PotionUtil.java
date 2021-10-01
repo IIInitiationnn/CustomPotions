@@ -41,6 +41,15 @@ public class PotionUtil {
                 || type.equalsIgnoreCase("LINGERING_POTION");
     }
 
+    public static boolean isValidDuration(boolean isLingering, int duration) {
+        return (isLingering && 1 <= duration && duration <= MagicNumber.lingeringPotionMaxDuration) ||
+            (!isLingering && 1 <= duration && duration <= MagicNumber.regularPotionMaxDuration);
+    }
+
+    public static int secondsToTicks(boolean isLingering, int duration) {
+        return isLingering ? duration * MagicNumber.lingeringTickMultiplier : duration * MagicNumber.regularTickMultiplier;
+    }
+
     /**
      * Given a potion effect, return its maximum amplifier.
      */
@@ -72,6 +81,11 @@ public class PotionUtil {
         }
     }
 
+    public static boolean isValidAmp(String effectName, int amplifier) {
+        int realAmplifier = amplifier - 1;
+        return (0 <= realAmplifier && realAmplifier <= maxAmp(effectName));
+    }
+
     /**
      * Returns all Vanilla and custom potions.
      */
@@ -80,8 +94,8 @@ public class PotionUtil {
         if (vanillaFirst)
             allPotions.addAll(PotionUtil.getVanillaPotions());
 
-        for (PotionObject potion : PotionReader.getCustomPotions()) {
-            allPotions.add(potion.getPotion());
+        for (Potion potion : PotionReader.getCustomPotions()) {
+            allPotions.add(potion.toItemStack());
         }
 
         if (!vanillaFirst)
@@ -92,8 +106,8 @@ public class PotionUtil {
     /**
      * Returns a list of all recipes for Vanilla and custom potions.
      */
-    public static List<PotionRecipeObject> getAllRecipes() {
-        List<PotionRecipeObject> recipes = new ArrayList<>();
+    public static List<PotionRecipe> getAllRecipes() {
+        List<PotionRecipe> recipes = new ArrayList<>();
         recipes.addAll(PotionReader.getCustomRecipes());
         recipes.addAll(getVanillaRecipes());
         return recipes;
@@ -102,7 +116,7 @@ public class PotionUtil {
     /**
      * TODO Returns a list of all recipes for Vanilla potions.
      */
-    public static List<PotionRecipeObject> getVanillaRecipes() {
+    public static List<PotionRecipe> getVanillaRecipes() {
         return new ArrayList<>();
     }
 
@@ -166,7 +180,7 @@ public class PotionUtil {
      */
     public static List<String> getCustomPotionIDs() {
         List<String> IDs = new ArrayList<>();
-        for (PotionObject customPotion : PotionReader.getCustomPotions())
+        for (Potion customPotion : PotionReader.getCustomPotions())
             IDs.add(customPotion.getPotionID());
         return IDs;
     }
@@ -265,9 +279,9 @@ public class PotionUtil {
      * Returns a custom potion ItemStack given its potion ID.
      */
     private static ItemStack customPotionFromID(String potionID) {
-        for (PotionObject customPotion : PotionReader.getCustomPotions()) {
+        for (Potion customPotion : PotionReader.getCustomPotions()) {
             if (customPotion.getPotionID().equals(potionID)) {
-                return customPotion.getPotion();
+                return customPotion.toItemStack();
             }
         }
         return null;
@@ -288,7 +302,7 @@ public class PotionUtil {
      */
     public static String potionNameFromID(String potionID) {
         // Custom Potion
-        for (PotionObject customPotion : PotionReader.getCustomPotions()) {
+        for (Potion customPotion : PotionReader.getCustomPotions()) {
             if (customPotion.getPotionID().equals(potionID)) {
                 return customPotion.getName();
             }
@@ -343,26 +357,6 @@ public class PotionUtil {
         potion.setItemMeta(meta);
     }
 
-    /**
-     * Returns whether potion has a certain effect type.
-     */
-    public static boolean hasEffect(ItemStack potion, PotionEffectType effectType) {
-        if (!isPotion((potion)))
-            return false;
-        PotionMeta meta = (PotionMeta) potion.getItemMeta();
-        if (meta == null) {
-            Main.log.severe("There was an error retrieving the item metadata when determining if potion has a certain effect.");
-            return false;
-        }
-
-        for (PotionEffect effect: meta.getCustomEffects()) {
-            if (effect.getType() == effectType) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     public static void setBasePotionData(ItemStack potion, PotionType type, boolean extended, boolean upgraded) {
         if (!isPotion((potion)))
             return;
@@ -379,18 +373,42 @@ public class PotionUtil {
     /**
      * Adds the recipes of a potion to its lore.
      */
-    public static void addLoreRecipes(ItemStack potion, PotionObject potionObject) {
+    public static void addLoreRecipes(ItemStack potion, Potion potionObject) {
         if (!isPotion(potion) || potionObject.getRecipes().size() == 0)
             return;
 
         List<String> lore = new ArrayList<>();
         lore.add("");
         lore.add(ChatColor.GOLD + "Recipes:");
-        for (PotionRecipeObject recipe : potionObject.getRecipes()) {
+        for (PotionRecipe recipe : potionObject.getRecipes()) {
             String ingredient = StringUtil.titleCase(recipe.getIngredient().name(), "_");
             String base = ChatColor.stripColor(potionNameFromID(recipe.getBase()));
             lore.add(ChatColor.GOLD + ingredient + " + " + base);
         }
         ItemStackUtil.addLore(potion, lore);
     }
+
+    public static List<PotionEffectSerializable> getEffects(ItemStack potion) {
+        PotionMeta meta = (PotionMeta) potion.getItemMeta();
+        if (meta == null) {
+            Main.log.severe("There was an error retrieving the item metadata when getting potion effects.");
+            return new ArrayList<>();
+        }
+        List <PotionEffectSerializable> effects = new ArrayList<>();
+        for (PotionEffect effect : meta.getCustomEffects()) {
+            effects.add(new PotionEffectSerializable(effect));
+        }
+        return effects;
+    }
+
+    public static void setEffects(ItemStack potion, List<PotionEffectSerializable> effects) {
+        PotionMeta potionMeta = (PotionMeta) potion.getItemMeta();
+        if (potionMeta == null) {
+            Main.log.severe("There was an error retrieving the potion metadata when setting potion effects.");
+            return;
+        }
+        for (PotionEffectSerializable effect : effects) potionMeta.addCustomEffect(effect.toPotionEffect(), true);
+        potion.setItemMeta(potionMeta);
+    }
+
 }

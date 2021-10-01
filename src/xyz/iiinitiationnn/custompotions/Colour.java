@@ -6,12 +6,13 @@ import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.bukkit.Color;
 import xyz.iiinitiationnn.custompotions.utils.ColourUtil;
 
+import java.io.Serializable;
 import java.util.List;
 
 import static xyz.iiinitiationnn.custompotions.utils.ColourUtil.getChatColor;
 import static xyz.iiinitiationnn.custompotions.utils.ColourUtil.randomDefaultColour;
 
-public class Colour {
+public class Colour implements Serializable {
     /*Colour RED = new Colour(0xFF, 0x00, 0x00);
     Colour ORANGE = new Colour(0xFF, 0xA5, 0x00);
     Colour YELLOW = new Colour(0xFF, 0xFF, 0x00);

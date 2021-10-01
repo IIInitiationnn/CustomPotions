@@ -1,132 +1,73 @@
 package xyz.iiinitiationnn.custompotions;
 
+import org.apache.commons.lang.builder.EqualsBuilder;
+import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.bukkit.Material;
-import org.bukkit.block.BrewingStand;
-import org.bukkit.inventory.BrewerInventory;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.scheduler.BukkitRunnable;
 
-import javax.annotation.Nullable;
-import java.util.List;
+import java.io.Serializable;
 
-public class PotionRecipe {
-    public ItemStack result;
-    public ItemStack predecessor;
-    public Material ingredient;
-    public int index;
+public class PotionRecipe implements Serializable {
+    private Material ingredient;
+    private String base; // potion ID
+    private String result; // potion ID
 
-    public PotionRecipe(ItemStack result, ItemStack predecessor, Material ingredient, int index) {
-        this.result = result;
-        this.predecessor = predecessor;
+    public PotionRecipe(Material ingredient, String base, String result) {
         this.ingredient = ingredient;
-        this.index = index;
+        this.base = base;
+        this.result = result;
     }
 
     public Material getIngredient() {
-        return ingredient;
+        return this.ingredient;
     }
 
-    @Nullable
-    public static PotionRecipe getRecipe(BrewerInventory inventory, List<PotionRecipe> recipes, Main pluginInstance) {
-        boolean allAir = true;
-        for (int i = 0; i < 3 && allAir; i++) {
-            if (inventory.getItem(i) == null || inventory.getItem(i).getType() == Material.AIR) continue;
-            allAir = false;
-        }
-        if (allAir) return null;
-
-        Material ingredient = inventory.getIngredient().getType();
-
-        for (PotionRecipe recipe : recipes) {
-            for (int i = 0; i < 3; i++) {
-                if (ingredient == recipe.getIngredient() && recipe.predecessor.isSimilar(inventory.getItem(i))) return recipe;
-            }
-        }
-        pluginInstance.getLogger().info("no recipe found");
-        return null;
+    public String getBase() {
+        return this.base;
     }
 
-    public void startBrewing(BrewerInventory inventory, Main pluginInstance, List<PotionRecipe> recipes) {
-        new BrewClock(this, inventory, pluginInstance, recipes);
+    public String getResult() {
+        return this.result;
     }
 
-    private class BrewClock extends BukkitRunnable {
-        private Main pluginInstance;
-        private BrewerInventory inventory;
-        private ItemStack ingredient;
-        private PotionRecipe recipe;
-        private List<PotionRecipe> recipes;
-        private BrewingStand brewingStand;
-        private int time = 400;
-
-        public BrewClock(PotionRecipe recipe, BrewerInventory inventory, Main pluginInstance, List<PotionRecipe> recipes) {
-            this.recipe = recipe;
-            this.recipes = recipes;
-            this.inventory = inventory;
-            this.ingredient = inventory.getIngredient();
-            this.brewingStand = inventory.getHolder();
-            this.pluginInstance = pluginInstance;
-            runTaskTimer(pluginInstance, 0L, 1L);
-        }
-        // TODO work out why it brek
-        @Override
-        public void run() {
-            if (time == 0) {
-                ItemStack ingredientMinusOne = ingredient.clone();
-                ingredientMinusOne.setAmount(ingredient.getAmount() - 1);
-                inventory.setIngredient(ingredientMinusOne);
-                for (int i = 0; i < 3; i ++) {
-                    if (inventory.getItem(i) == null || inventory.getItem(i).getType() == Material.AIR) continue;
-                    for (PotionRecipe r : recipes) {
-                        if (r.ingredient != ingredient.getType()) continue;
-                        if (inventory.getItem(i).isSimilar(r.predecessor)) {
-                            inventory.setItem(i, r.result);
-                            break;
-                        }
-                    }
-                }
-                cancel();
-                return;
-            }
-
-            if (inventory.getIngredient() == null) {
-                pluginInstance.getLogger().info("ingredient is null");
-                cancel();
-                return;
-            }
-
-            if (inventory.getIngredient().getType() == ingredient.getType() && time == 400) {
-                if (brewingStand.getFuelLevel() == 0) {
-                    if (inventory.getFuel() == null) {
-                        cancel();
-                        return;
-                    } else {
-                        ItemStack fuelMinusOne = inventory.getFuel();
-                        fuelMinusOne.setAmount(fuelMinusOne.getAmount() - 1);
-                        inventory.setFuel(fuelMinusOne);
-                        brewingStand.setFuelLevel(20);
-                    }
-                } else {
-                    brewingStand.setFuelLevel(inventory.getHolder().getFuelLevel() - 1);
-                }
-                pluginInstance.getLogger().info("starting brew");
-                brewingStand.setBrewingTime(400);
-            }
-
-            boolean allAir = true;
-            for (int i = 0; i < 3 && allAir; i++) {
-                if (inventory.getItem(i) == null || inventory.getItem(i).getType() == Material.AIR) continue;
-                allAir = false;
-            }
-            if (allAir) {
-                cancel();
-                return;
-            }
-            time--;
-            brewingStand.setBrewingTime(time);
-            brewingStand.update(); // is the disappearing / appearing potion stuff due to this?
-        }
+    public void setIngredient(Material ingredient) {
+        this.ingredient = ingredient;
     }
 
+    public void setBase(String base) {
+        this.base = base;
+    }
+
+    public void setResult(String result) {
+        this.result = result;
+    }
+
+    public boolean conflictsWith(PotionRecipe potionRecipe) {
+        return this.ingredient == potionRecipe.ingredient && this.base.equals(potionRecipe.base)
+                && !this.result.equals(potionRecipe.result);
+    }
+
+    @Override
+    public int hashCode() {
+        return new HashCodeBuilder(17, 31). // two randomly chosen prime numbers
+            append(this.ingredient).
+            append(this.base).
+            append(this.result).
+            toHashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof PotionRecipe))
+            return false;
+        if (obj == this)
+            return true;
+
+        PotionRecipe r = (PotionRecipe) obj;
+        return new EqualsBuilder().
+            append(this.ingredient, r.ingredient).
+            append(this.base, r.base).
+            append(this.result, r.result).
+            isEquals();
+    }
 
 }

@@ -9,10 +9,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffectType;
-import xyz.iiinitiationnn.custompotions.utils.ColourUtil;
-import xyz.iiinitiationnn.custompotions.utils.ItemStackUtil;
-import xyz.iiinitiationnn.custompotions.utils.PotionUtil;
-import xyz.iiinitiationnn.custompotions.utils.StringUtil;
+import xyz.iiinitiationnn.custompotions.utils.*;
 
 import java.util.*;
 
@@ -45,83 +42,104 @@ public class InventoryGUI {
     // don't handle actions like writing to data file here, since this is a constructor used to construct a gui based on previous action
     // should delegate that to listener which will delegate to another class ActionProcess or something like that
 
+    // TODO currently the PotionObject (Potion now) in the state represents what the potion will look like when some choice is made
+    //  but the state represents what is currently happening, and the action decides what will happen in the next state
+    //  we can keep it as it is, which will be a little unintuitive but cleaner, or we can put the processing in InventoryGuiListener
+    //  verdict: i think im going to put the processing in InventoryGUIListener so it makes more sense that the state represents now
+    //      and the future is calculated by the action. maybe java generics (generic object) for the selected option though so you dont have to
+    //      read off the clicked item, you can just use the state (much cleaner code)
+
     // Constructors
-    public InventoryGUI(LocalizedName state, PotionObject existingPotion, Material recipeIngredient) {
+    public InventoryGUI(State state) {
+        boolean needsNextPage;
         switch (state.getMenu()) {
             case "mainMenu":
                 this.inv = Bukkit.createInventory(null, INVENTORY_SIZE, ChatColor.GOLD + "Select a Potion to Modify");
+                setEmpty(PAGE_SIZE_A);
+
+                needsNextPage = addMainMenuPotions(state);
+
                 setPreviousPageSlot(state);
-                setNextPageSlot(state);
-                setExitSlot(state);
-                addMainMenuPotions(state);
+                setNextPageSlot(state, needsNextPage);
+                setBarrierExitSlot(state);
                 break;
             case "potionType":
                 this.inv = Bukkit.createInventory(null, INVENTORY_SIZE, ChatColor.GOLD + "Select a Potion Type");
+                setEmpty(PAGE_SIZE_B);
+
+                needsNextPage = addTypePotions(state);
+
                 setPreviousPageSlot(state);
-                setNextPageSlot(state);
+                setNextPageSlot(state, needsNextPage);
                 setPreviousMenuSlot(state);
                 setNextMenuSlot(state);
-
-                setExitSlot(state, existingPotion);
-                addTypePotions(state, existingPotion.getPotion());
+                setPotionExitSlot(state);
                 break;
             case "potionColour":
                 this.inv = Bukkit.createInventory(null, INVENTORY_SIZE, ChatColor.GOLD + "Select a Potion Colour");
+                setEmpty(PAGE_SIZE_B);
+
+                needsNextPage = addColourPotions(state);
+
                 setPreviousPageSlot(state);
-                setNextPageSlot(state);
+                setNextPageSlot(state, needsNextPage);
                 setPreviousMenuSlot(state);
                 setNextMenuSlot(state);
-
-                setExitSlot(state, existingPotion);
-                addColourPotions(state, existingPotion.getPotion());
+                setPotionExitSlot(state);
                 break;
             case "effectType":
                 this.inv = Bukkit.createInventory(null, INVENTORY_SIZE, ChatColor.GOLD + "Select an Effect Type");
+                setEmpty(PAGE_SIZE_B);
+
+                needsNextPage = addEffectTypePotions(state);
+
                 setPreviousPageSlot(state);
-                setNextPageSlot(state);
+                setNextPageSlot(state, needsNextPage);
                 setPreviousMenuSlot(state);
                 setNextMenuSlot(state);
-
-                setExitSlot(state, existingPotion);
-                addEffectTypePotions(state, existingPotion.getPotion());
+                setPotionExitSlot(state);
                 break;
             case "effectDuration":
                 this.anvilInv = new AnvilGUI.Builder();
                 this.anvilInv.title(ChatColor.GOLD + "Effect Duration");
-                addEffectDurationPotion(state, existingPotion.getPotion());
+                addEffectDurationPotion(state);
                 break;
             case "effectAmplifier":
                 this.anvilInv = new AnvilGUI.Builder();
                 this.anvilInv.title(ChatColor.GOLD + "Effect Amplifier");
-                addEffectAmplifierPotion(state, existingPotion.getPotion());
+                addEffectAmplifierPotion(state);
                 break;
             case "recipeIngredient":
                 inv = Bukkit.createInventory(null, 54, ChatColor.GOLD + "Select an Ingredient for a Recipe");
+                setEmpty(PAGE_SIZE_B);
+
+                needsNextPage = addIngredients(state);
+
                 setPreviousPageSlot(state);
-                setNextPageSlot(state);
+                setNextPageSlot(state, needsNextPage);
                 setPreviousMenuSlot(state);
                 setNextMenuSlot(state);
-
-                setExitSlot(state, existingPotion);
-                addIngredients(state, existingPotion);
+                setPotionExitSlot(state);
                 break;
             case "recipeBase":
                 inv = Bukkit.createInventory(null, 54, ChatColor.GOLD + "Select a Base for the Recipe");
-                setPreviousPageSlot(state);
-                setNextPageSlot(state);
-                setPreviousMenuSlot(state, PREVIOUS_MENU_SLOT + 1);
+                setEmpty(PAGE_SIZE_C);
 
-                setExitSlot(state, existingPotion);
-                addBases(state, existingPotion, recipeIngredient);
+                needsNextPage = addBases(state);
+
+                setPreviousPageSlot(state);
+                setNextPageSlot(state, needsNextPage);
+                setPreviousMenuSlot(state, PREVIOUS_MENU_SLOT + 1);
+                setPotionExitSlot(state);
                 break;
             case "potionName":
                 this.anvilInv = new AnvilGUI.Builder();
                 this.anvilInv.title(ChatColor.GOLD + "Enter a Name");
-                addNamePotion(state, existingPotion.getPotion());
+                addNamePotion(state);
                 break;
             case "finalMenu":
                 inv = Bukkit.createInventory(null, 54, ChatColor.GOLD + "Confirm Changes");
-                setFinalPotionSlot(state, existingPotion);
+                setFinalPotionSlot(state);
                 setFinalEditSlot(state);
                 setFinalConfirmSlot(state);
                 setFinalExitSlot(state);
@@ -129,41 +147,55 @@ public class InventoryGUI {
         }
     }
 
-    public InventoryGUI(LocalizedName state, PotionObject existingPotion) {
-        this(state, existingPotion, null);
-    }
-
-    public InventoryGUI(LocalizedName state) {
-        this(state, null, null);
-    }
-
-    public InventoryGUI() {
-        this(new LocalizedName(), null, null);
-    }
-
-
     // Methods
+
+    /**
+     * Puts placeholder empty items in certain slots to prevent buttons from being occupied by,
+     * and later overriding, items in the GUI.
+     * @param pageSize
+     */
+    private void setEmpty(int pageSize) {
+        if (pageSize == PAGE_SIZE_A) {
+            for (int slot : Arrays.asList(PREVIOUS_PAGE_SLOT, NEXT_PAGE_SLOT, EXIT_SLOT)) {
+                this.inv.setItem(slot, new ItemStack(Material.BARRIER));
+            }
+        } else if (pageSize == PAGE_SIZE_B) {
+            for (int slot :
+                    Arrays.asList(PREVIOUS_PAGE_SLOT, NEXT_PAGE_SLOT, PREVIOUS_MENU_SLOT, NEXT_MENU_SLOT, EXIT_SLOT)) {
+                this.inv.setItem(slot, new ItemStack(Material.BARRIER));
+            }
+        } else if (pageSize == PAGE_SIZE_C) {
+            for (int slot : Arrays.asList(PREVIOUS_PAGE_SLOT, NEXT_PAGE_SLOT, NEXT_MENU_SLOT, EXIT_SLOT)) {
+                this.inv.setItem(slot, new ItemStack(Material.BARRIER));
+            }
+        }
+    }
+
     /**
      * Sets the previous page slot to a selector which brings the user to the previous page of the same menu.
      */
-    private void setPreviousPageSlot(LocalizedName state) {
+    private void setPreviousPageSlot(State state) {
         int page = state.getPage();
         boolean needsPreviousPage = page > 0;
-        ItemStack selector = needsPreviousPage ? new ItemStack(Material.ORANGE_STAINED_GLASS_PANE)
-                : new ItemStack(Material.RED_STAINED_GLASS_PANE);
 
-        LocalizedName previousPageState = state.clone();
-        previousPageState.setAction(needsPreviousPage ? "pagePrevious" : "pageInvalid");
-
-        ItemStackUtil.setLocalizedName(selector, previousPageState.toLocalizedString());
-        ItemStackUtil.setDisplayName(selector, needsPreviousPage
-                ? ChatColor.GOLD + "PREVIOUS PAGE" : ChatColor.RED + "NO PREVIOUS PAGE");
+        ItemStack selector;
+        State previousPageState = state.clone();
 
         if (needsPreviousPage) {
+            selector = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
+            previousPageState.setAction("pagePrevious");
+            ItemStackUtil.setDisplayName(selector, ChatColor.GOLD + "PREVIOUS PAGE");
+
             List<String> lore = new ArrayList<>();
             lore.add(ChatColor.GOLD + "Page " + page);
             ItemStackUtil.addLore(selector, lore);
+        } else {
+            selector = new ItemStack(Material.RED_STAINED_GLASS_PANE);
+            previousPageState.setAction("pageInvalid");
+            ItemStackUtil.setDisplayName(selector, ChatColor.RED + "NO PREVIOUS PAGE");
         }
+
+        ItemStackUtil.setLocalizedName(selector, previousPageState.encodeToString());
 
         this.inv.setItem(PREVIOUS_PAGE_SLOT, selector);
     }
@@ -171,41 +203,45 @@ public class InventoryGUI {
     /**
      * Sets the next page slot to a selector which brings the user to the next page of the same menu.
      */
-    private void setNextPageSlot(LocalizedName state) {
+    private void setNextPageSlot(State state, boolean needsNextPage) {
         int page = state.getPage();
-        boolean needsNextPage = page > 0;
-        ItemStack selector = needsNextPage ? new ItemStack(Material.LIME_STAINED_GLASS_PANE)
-                : new ItemStack(Material.RED_STAINED_GLASS_PANE);
 
-        LocalizedName nextPageState = state.clone();
-        nextPageState.setAction(needsNextPage ? "pageNext" : "pageInvalid");
-
-        ItemStackUtil.setLocalizedName(selector, nextPageState.toLocalizedString());
-        ItemStackUtil.setDisplayName(selector, needsNextPage
-                ? ChatColor.GREEN + "NEXT PAGE" : ChatColor.RED + "NO NEXT PAGE");
+        ItemStack selector;
+        State nextPageState = state.clone();
 
         if (needsNextPage) {
+            selector = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
+            nextPageState.setAction("pageNext");
+            ItemStackUtil.setDisplayName(selector, ChatColor.GREEN + "NEXT PAGE");
+            
             List<String> lore = new ArrayList<>();
-            lore.add(ChatColor.GOLD + "Page " + (page + 2));
+            lore.add(ChatColor.GREEN + "Page " + (page + 2));
             ItemStackUtil.addLore(selector, lore);
+        } else {
+            selector = new ItemStack(Material.RED_STAINED_GLASS_PANE);
+            nextPageState.setAction("pageInvalid");
+            ItemStackUtil.setDisplayName(selector, ChatColor.RED + "NO NEXT PAGE");
         }
+
+        ItemStackUtil.setLocalizedName(selector, nextPageState.encodeToString());
+
         this.inv.setItem(NEXT_PAGE_SLOT, selector);
     }
 
     /**
      * Sets the previous menu slot to a selector which brings the user to the previous menu.
      */
-    private void setPreviousMenuSlot(LocalizedName state) {
+    private void setPreviousMenuSlot(State state) {
         setPreviousMenuSlot(state, PREVIOUS_MENU_SLOT);
     }
 
     /**
      * Sets the previous menu slot to a selector which brings the user to the previous menu.
      */
-    private void setPreviousMenuSlot(LocalizedName state, int slot) {
+    private void setPreviousMenuSlot(State state, int slot) {
         ItemStack selector = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
 
-        LocalizedName previousMenuState = state.clone();
+        State previousMenuState = state.clone();
         previousMenuState.setAction("skipL");
 
         List<String> lore = new ArrayList<>();
@@ -229,7 +265,7 @@ public class InventoryGUI {
                 lore.add(ChatColor.RED + "Warning: you will lose your choice of ingredient!");
         }
 
-        ItemStackUtil.setLocalizedName(selector, previousMenuState.toLocalizedString());
+        ItemStackUtil.setLocalizedName(selector, previousMenuState.encodeToString());
         ItemStackUtil.setDisplayName(selector, ChatColor.GOLD + "PREVIOUS MENU");
         ItemStackUtil.addLore(selector, lore);
 
@@ -239,10 +275,10 @@ public class InventoryGUI {
     /**
      * Sets the next menu slot to a selector which brings the user to the next menu.
      */
-    private void setNextMenuSlot(LocalizedName state) {
+    private void setNextMenuSlot(State state) {
         ItemStack selector = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
 
-        LocalizedName nextMenuState = state.clone();
+        State nextMenuState = state.clone();
         nextMenuState.setAction("skipR");
 
         List<String> lore = new ArrayList<>();
@@ -261,7 +297,7 @@ public class InventoryGUI {
                 break;
         }
 
-        ItemStackUtil.setLocalizedName(selector, nextMenuState.toLocalizedString());
+        ItemStackUtil.setLocalizedName(selector, nextMenuState.encodeToString());
         ItemStackUtil.setDisplayName(selector, ChatColor.GREEN + "NEXT MENU");
         ItemStackUtil.addLore(selector, lore);
 
@@ -269,18 +305,30 @@ public class InventoryGUI {
     }
 
     /**
+     * Given the current page index (starting at 0), the size of each page, and the total number of items,
+     * determine if there is another page following this one.
+     * @param currentPage
+     * @param pageSize
+     * @param totalItems
+     * @return
+     */
+    private static boolean determineIfNextPage(int currentPage, int pageSize, int totalItems) {
+        return (totalItems - pageSize * currentPage) > pageSize;
+    }
+
+    /**
      * Sets exit slot for the main menu using a barrier block.
      */
-    private void setExitSlot(LocalizedName state) {
+    private void setBarrierExitSlot(State state) {
         ItemStack selector = new ItemStack(Material.BARRIER);
 
-        LocalizedName exitState = state.clone();
+        State exitState = state.clone();
         exitState.setAction("exit");
 
         List<String> lore = new ArrayList<>();
         lore.add(ChatColor.RED + "Click to exit.");
 
-        ItemStackUtil.setLocalizedName(selector, exitState.toLocalizedString());
+        ItemStackUtil.setLocalizedName(selector, exitState.encodeToString());
         ItemStackUtil.setDisplayName(selector, ChatColor.RED + "EXIT");
         ItemStackUtil.addLore(selector,lore);
 
@@ -290,10 +338,11 @@ public class InventoryGUI {
     /**
      * Sets exit slot for any menu using the creator's existing potion.
      */
-    private void setExitSlot(LocalizedName state, PotionObject existingPotion) {
-        ItemStack selector = existingPotion.getPotion().clone();
+    private void setPotionExitSlot(State state) {
+        Potion existingPotion = state.getPotion();
+        ItemStack selector = existingPotion.toItemStack().clone();
 
-        LocalizedName exitState = state.clone();
+        State exitState = state.clone();
         exitState.setAction("exit");
 
         List<String> lore = new ArrayList<>();
@@ -302,9 +351,8 @@ public class InventoryGUI {
         lore.add(ChatColor.GREEN + "Left click to save your changes and exit.");
         lore.add(ChatColor.RED + "Right click to exit without saving.");
 
-        ItemStackUtil.setLocalizedName(selector, exitState.toLocalizedString());
+        ItemStackUtil.setLocalizedName(selector, exitState.encodeToString());
         PotionUtil.addLoreRecipes(selector, existingPotion);
-        // we assume that the existingPotion has the correct display name already
         ItemStackUtil.addLore(selector,lore);
 
         this.inv.setItem(EXIT_SLOT, selector);
@@ -314,23 +362,22 @@ public class InventoryGUI {
      * Adds potions for the main menu including, if applicable:
      * a (random) new potion, and all existing potions.
      */
-    private void addMainMenuPotions(LocalizedName state) {
+    private boolean addMainMenuPotions(State state) {
         int page = state.getPage();
-        LocalizedName nextState = state.clone();
-        nextState.setAction("selectPotion");
+        State nextStateBase = state.clone();
+        nextStateBase.setAction("selectPotion");
 
         List<ItemStack> allPotions = new ArrayList<>();
         ItemStack newPotion = getNewPotion();
-        List<PotionObject> customPotions = PotionReader.getCustomPotions();
-
         allPotions.add(newPotion);
-        for (PotionObject customPotion : customPotions) {
-            nextState.setPotionID(customPotion.getPotionID());
-            nextState.setPotionRecipes(customPotion.getRecipes());
-            nextState.setPotionName(customPotion.getName());
 
-            ItemStack customPotionItem = customPotion.getPotion();
-            ItemStackUtil.setLocalizedName(customPotionItem, nextState.toLocalizedString());
+        List<Potion> customPotions = PotionReader.getCustomPotions();
+        for (Potion customPotion : customPotions) {
+            State nextState = nextStateBase.clone();
+            nextState.setPotion(customPotion);
+            ItemStack customPotionItem = customPotion.toItemStack();
+
+            ItemStackUtil.setLocalizedName(customPotionItem, nextState.encodeToString());
             PotionUtil.addLoreRecipes(customPotionItem, customPotion);
 
             List<String> lore = new ArrayList<>();
@@ -346,22 +393,19 @@ public class InventoryGUI {
             Math.min((page + 1) * PAGE_SIZE_A, allPotions.size()))) {
             this.inv.addItem(potion);
         }
+        return determineIfNextPage(page, PAGE_SIZE_A, allPotions.size());
     }
 
     /**
      * Returns a potion indicating a new potion is to be created.
      */
     private ItemStack getNewPotion() {
-        // New potion item
-        ItemStack potion = new ItemStack(Material.POTION);
-        LocalizedName nextState = new LocalizedName();
+        State nextState = new State();
         List<String> lore = new ArrayList<>();
         lore.add(ChatColor.GOLD + "Create a new custom potion from scratch.");
 
-        Colour randomColour = new Colour();
-        PotionUtil.setColor(potion, randomColour);
-        ItemStackUtil.setDisplayName(potion, ColourUtil.getChatColor(randomColour) + "New Potion");
-        ItemStackUtil.setLocalizedName(potion, nextState.toLocalizedString());
+        ItemStack potion = nextState.getPotion().toItemStack();
+        ItemStackUtil.setLocalizedName(potion, nextState.encodeToString());
         ItemStackUtil.addLore(potion, lore);
 
         return potion;
@@ -371,161 +415,194 @@ public class InventoryGUI {
      * Adds potions for the potion type selection menu including:
      * potions, splash potions, and lingering potions.
      */
-    private void addTypePotions(LocalizedName state, ItemStack existingPotion) {
-        LocalizedName nextState = state.clone();
-        nextState.setAction("selectType");
-        ChatColor c = ColourUtil.getChatColor(existingPotion);
+    private boolean addTypePotions(State state) {
+        State nextStateBase = state.clone();
+        nextStateBase.setAction("selectType");
+        ChatColor c = ColourUtil.getChatColor(nextStateBase.getPotion().toItemStack());
 
         // Potion
-        ItemStack potion = existingPotion.clone();
-        potion.setType(Material.POTION);
-        ItemStackUtil.setLocalizedName(potion, nextState.toLocalizedString());
+        State nextState1 = nextStateBase.clone();
+        nextState1.getPotion().setType(Material.POTION);
+        ItemStack potion = nextState1.getPotion().toItemStack();
+
+        ItemStackUtil.setLocalizedName(potion, nextState1.encodeToString());
         ItemStackUtil.setDisplayName(potion, c + "Potion");
         this.inv.addItem(potion);
 
         // Splash Potion
-        ItemStack splashPotion = existingPotion.clone();
-        splashPotion.setType(Material.SPLASH_POTION);
-        ItemStackUtil.setLocalizedName(splashPotion, nextState.toLocalizedString());
+        State nextState2 = nextStateBase.clone();
+        nextState2.getPotion().setType(Material.SPLASH_POTION);
+        ItemStack splashPotion = nextState2.getPotion().toItemStack();
+
+        ItemStackUtil.setLocalizedName(splashPotion, nextState2.encodeToString());
         ItemStackUtil.setDisplayName(splashPotion, c + "Splash Potion");
         this.inv.addItem(splashPotion);
 
-        // Potion
-        ItemStack lingeringPotion = existingPotion.clone();
-        lingeringPotion.setType(Material.LINGERING_POTION);
-        ItemStackUtil.setLocalizedName(lingeringPotion, nextState.toLocalizedString());
+        // Lingering Potion
+        State nextState3 = nextStateBase.clone();
+        nextState3.getPotion().setType(Material.LINGERING_POTION);
+        ItemStack lingeringPotion = nextState3.getPotion().toItemStack();
+
+        ItemStackUtil.setLocalizedName(lingeringPotion, nextState3.encodeToString());
         ItemStackUtil.setDisplayName(lingeringPotion, c + "Lingering Potion");
         this.inv.addItem(lingeringPotion);
+
+        return false;
     }
 
     /**
      * Adds potions for the potion colour selection menu.
      */
-    private void addColourPotions(LocalizedName state, ItemStack existingPotion) {
-        LocalizedName nextState = state.clone();
-        nextState.setAction("selectColour");
+    private boolean addColourPotions(State state) {
+        State nextStateBase = state.clone();
+        nextStateBase.setAction("selectColour");
         List<Colour> colours = ColourUtil.defaultPotionColourList();
 
         for (Colour colour : colours) {
-            ItemStack potion = existingPotion.clone();
-            ItemStackUtil.setLocalizedName(potion, nextState.toLocalizedString());
-            PotionUtil.setColor(potion, colour);
+            State nextState = nextStateBase.clone();
+            nextState.getPotion().setColour(colour);
+            ItemStack potion = nextState.getPotion().toItemStack();
+
+            ItemStackUtil.setLocalizedName(potion, nextState.encodeToString());
 
             ChatColor c = ColourUtil.getChatColor(colour);
             ItemStackUtil.setDisplayName(potion, c + ColourUtil.defaultPotionColourMapReverse().get(colour));
             this.inv.addItem(potion);
         }
+        return false;
     }
 
     /**
      * Adds potions for the potion effect type selection menu.
      */
-    private void addEffectTypePotions(LocalizedName state, ItemStack existingPotion) {
-        LocalizedName nextStateA = state.clone();
-        nextStateA.setAction("addEffectType");
-        LocalizedName nextStateS = state.clone();
-        nextStateS.setAction("selectEffectType");
-        ChatColor c = ColourUtil.getChatColor(existingPotion);
+    private boolean addEffectTypePotions(State state) {
+        ChatColor c = ColourUtil.getChatColor(state.getPotion().toItemStack());
 
         // No Effects
-        ItemStack plainPotion = existingPotion.clone();
+        State plainPotionState = state.clone();
+        plainPotionState.setAction("noEffects");
+        plainPotionState.getPotion().setEffects(new ArrayList<>());
+        ItemStack plainPotion = plainPotionState.getPotion().toItemStack();
+
         List<String> lore = new ArrayList<>();
         lore.add("");
         lore.add(ChatColor.GOLD + "This potion will have no effects.");
-        ItemStackUtil.setLocalizedName(plainPotion, nextStateA.toLocalizedString());
+        ItemStackUtil.setLocalizedName(plainPotion, plainPotionState.encodeToString());
         ItemStackUtil.setDisplayName(plainPotion, c + "NO EFFECTS");
         ItemStackUtil.addLore(plainPotion, lore);
         this.inv.addItem(plainPotion);
+        // TODO no handling on this yet; currently goes to duration menu
 
         // Effects
         List<PotionEffectType> effectTypeList = Arrays.asList(PotionEffectType.values());
         effectTypeList.sort(Comparator.comparing(PotionEffectType :: getName)); // sort list by effect name
         for (PotionEffectType effectType : effectTypeList) {
-            ItemStack potion = existingPotion.clone();
             String commonName = StringUtil.toCommonName(effectType.getName());
 
             lore = new ArrayList<>();
             lore.add("");
-            if (PotionUtil.hasEffect(potion, effectType)) {
+            ItemStack potion;
+            if (state.getPotion().hasEffect(effectType)) {
+                State nextState = state.clone();
+                nextState.setAction("selectEffectType");
+                nextState.getInput().setEffectType(effectType.getName());
+                Main.log.info(effectType.getName()); // hhh
+                potion = nextState.getPotion().toItemStack();
+
                 lore.add(ChatColor.GOLD + "Left click to modify " + commonName + ".");
                 lore.add(ChatColor.RED + "Right click to remove " + commonName + ".");
-                ItemStackUtil.setLocalizedName(potion, nextStateS.toLocalizedString());
+                ItemStackUtil.setLocalizedName(potion, nextState.encodeToString());
             } else {
+                State nextState = state.clone();
+                nextState.setAction("addEffectType");
+                nextState.getInput().setEffectType(effectType.getName());
+                Main.log.info(effectType.getName()); // hhh
+                potion = nextState.getPotion().toItemStack();
+
                 lore.add(ChatColor.GREEN + "Click to add " + commonName + ".");
-                ItemStackUtil.setLocalizedName(potion, nextStateA.toLocalizedString());
+                ItemStackUtil.setLocalizedName(potion, nextState.encodeToString());
             }
-            lore.add(ChatColor.GOLD + "It has potency range 1 to " + (PotionUtil.maxAmp(effectType.getName()) + 1) + ".");
+
+            int maxAmp = PotionUtil.maxAmp(effectType.getName()) + 1;
+            if (maxAmp == 1) {
+                lore.add(ChatColor.GOLD + "It has potency 1.");
+            } else {
+                lore.add(ChatColor.GOLD + "Its potency ranges from 1 to " + maxAmp + ".");
+            }
             ItemStackUtil.setDisplayName(potion, c + effectType.getName());
             ItemStackUtil.addLore(potion, lore);
             this.inv.addItem(potion);
         }
+        return false;
     }
 
     /**
      * Adds a potion for the effect duration menu.
      */
-    private void addEffectDurationPotion(LocalizedName state, ItemStack existingPotion) {
-        LocalizedName nextState = state.clone();
+    private void addEffectDurationPotion(State state) {
+        State nextState = state.clone();
         nextState.setAction("enterEffectDuration");
-        nextState.setExtraField(state.getExtraField());
 
         List<String> lore = new ArrayList<>();
         lore.add("");
         lore.add(ChatColor.GOLD + "This is your current potion.");
-        if (existingPotion.getType() == Material.LINGERING_POTION) {
+        if (state.getPotion().isLingering()) {
             lore.add(ChatColor.GOLD + "Enter the effect duration in seconds (1 to 26,843,545).");
         } else {
             lore.add(ChatColor.GOLD + "Enter the effect duration in seconds (1 to 107,374,182).");
         }
+        lore.add("");
         lore.add(ChatColor.GREEN + "Click the output slot to continue.");
         lore.add(ChatColor.GOLD + "Click the left input slot to skip (if you have misclicked).");
         lore.add(ChatColor.RED + "Press ESC to exit without saving.");
 
-        ItemStack potion = existingPotion.clone();
-        ItemStackUtil.setLocalizedName(potion, nextState.toLocalizedString());
+        ItemStack potion = nextState.getPotion().toItemStack();
+        ItemStackUtil.setLocalizedName(potion, nextState.encodeToString());
         ItemStackUtil.addLore(potion, lore);
 
-        this.anvilInv.text(ChatColor.RESET + "Enter here:");
-        this.anvilInv.onComplete((whoTyped, whatWasTyped) -> AnvilGUI.Response.text("Enter here:")); // TODO send to process handler skip the listener and also onLeftInputClick and onRightInputClick
-        this.anvilInv.plugin(Main.getPlugin(Main.class));
+        this.anvilInv
+            .plugin(Main.getPlugin(Main.class))
+            .text(ChatColor.RESET + "Enter here:")
+            .itemLeft(potion)
+            .onComplete((whoTyped, whatWasTyped) -> AnvilGUI.Response.close());
     }
 
     /**
      * Adds a potion for the effect amplifier menu.
      */
-    private void addEffectAmplifierPotion(LocalizedName state, ItemStack existingPotion) {
-        LocalizedName nextState = state.clone();
+    private void addEffectAmplifierPotion(State state) {
+        State nextState = state.clone();
         nextState.setAction("enterEffectAmplifier");
-        String effectTypeName = state.getExtraField();
+        String effectTypeName = state.getInput().getEffectType();
 
         List<String> lore = new ArrayList<>();
         lore.add("");
         lore.add(ChatColor.GOLD + "This is your current potion.");
-        lore.add(ChatColor.GOLD + "Enter the effect amplifier (integer from 1 to " + PotionUtil.maxAmp(effectTypeName) + 1 + ").");
+        lore.add(ChatColor.GOLD + "Enter the effect amplifier (integer from 1 to " + (PotionUtil.maxAmp(effectTypeName) + 1) + ").");
         lore.add(ChatColor.GOLD + "1 means potency I, eg. " + StringUtil.toCommonName(effectTypeName) + " I.");
         lore.add(ChatColor.GOLD + "Similarly, 2 means potency II, eg. " + StringUtil.toCommonName(effectTypeName) + " II, and so on.");
+        lore.add("");
         lore.add(ChatColor.GREEN + "Click the output slot to continue.");
         lore.add(ChatColor.GOLD + "Click the left input slot to skip (if you have misclicked).");
         lore.add(ChatColor.RED + "Press ESC to exit without saving.");
 
-        ItemStack potion = existingPotion.clone();
-        ItemStackUtil.setLocalizedName(potion, nextState.toLocalizedString());
+        ItemStack potion = nextState.getPotion().toItemStack();
+        ItemStackUtil.setLocalizedName(potion, nextState.encodeToString());
         ItemStackUtil.addLore(potion, lore);
 
-        this.anvilInv.text(ChatColor.RESET + "Enter here:");
-        this.anvilInv.onComplete((whoTyped, whatWasTyped) -> AnvilGUI.Response.text("Enter here:")); // TODO send to process handler skip the listener and also onLeftInputClick and onRightInputClick
-        this.anvilInv.plugin(Main.getPlugin(Main.class));
+        this.anvilInv
+            .plugin(Main.getPlugin(Main.class))
+            .text(ChatColor.RESET + "Enter here:")
+            .itemLeft(potion)
+            .onComplete((whoTyped, whatWasTyped) -> AnvilGUI.Response.close());
     }
 
     /**
      * Adds materials for the recipe ingredient selection menu.
      */
-    private void addIngredients(LocalizedName state, PotionObject existingPotion) {
+    private boolean addIngredients(State state) {
+        // TODO recipes are cooked?????
         int page = state.getPage();
-        LocalizedName nextStateA = state.clone();
-        nextStateA.setAction("addRecipeIngredient");
-        LocalizedName nextStateS = state.clone();
-        nextStateS.setAction("selectRecipeIngredient");
 
         List<Material> allValidMaterials = new ArrayList<>();
         for (Material material : Material.values()) {
@@ -535,7 +612,7 @@ public class InventoryGUI {
         }
 
         Set<Material> chosenIngredients = new HashSet<>();
-        for (PotionRecipeObject recipe : existingPotion.getRecipes()) {
+        for (PotionRecipe recipe : state.getPotion().getRecipes()) {
             chosenIngredients.add(recipe.getIngredient());
         }
 
@@ -544,44 +621,49 @@ public class InventoryGUI {
             ItemStack item = new ItemStack(material);
             List<String> lore = new ArrayList<>();
             String materialName = StringUtil.titleCase(material.name(), "_");
+            State nextState = state.clone();
+            nextState.getInput().setMaterial(materialName);
             if (chosenIngredients.contains(material)) {
+                nextState.setAction("selectRecipeIngredient");
                 lore.add(ChatColor.GOLD + "Left click to add or modify the recipes using " + materialName + ".");
                 lore.add(ChatColor.RED + "Right click to remove all recipes using " + materialName + ".");
-                ItemStackUtil.setLocalizedName(item, nextStateS.toLocalizedString());
             } else {
+                nextState.setAction("addRecipeIngredient");
+                nextState.getInput().setMaterial(materialName);
                 lore.add(ChatColor.GREEN + "Click to add a recipe using " + materialName + ".");
-                ItemStackUtil.setLocalizedName(item, nextStateA.toLocalizedString());
             }
+            ItemStackUtil.setLocalizedName(item, nextState.encodeToString());
             ItemStackUtil.addLore(item, lore);
             this.inv.addItem(item);
         }
+        return determineIfNextPage(page, PAGE_SIZE_B, allValidMaterials.size());
     }
 
     /**
      * Adds potions for the recipe base potion selection menu.
      */
-    private void addBases(LocalizedName state, PotionObject existingPotion, Material recipeIngredient) {
+    private boolean addBases(State state) {
         int page = state.getPage();
-        LocalizedName nextStateA = state.clone();
-        nextStateA.setAction("addRecipeBase");
-        LocalizedName nextStateR = state.clone();
-        nextStateR.setAction("removeRecipeBase");
-        LocalizedName nextStateI = state.clone();
-        nextStateI.setAction("recipeBaseInvalid");
+        Material recipeIngredient = Material.matchMaterial(state.getInput().getMaterial());
 
         List<ItemStack> potions = new ArrayList<>();
         for (ItemStack vanillaPotion : PotionUtil.getVanillaPotions()) {
-            PotionRecipeObject resultantRecipe = new PotionRecipeObject(recipeIngredient,
-                    PotionUtil.getIDFromVanillaPotion(vanillaPotion), existingPotion.getPotionID());
-            LocalizedName nextState = nextStateA.clone();
+            State nextState = state.clone();
+            nextState.setAction("addRecipeBase");
+
+            Potion potion = nextState.getPotion();
+
+            PotionRecipe resultantRecipe = new PotionRecipe(recipeIngredient,
+                    PotionUtil.getIDFromVanillaPotion(vanillaPotion), potion.getPotionID());
+
             List<String> lore = new ArrayList<>();
             lore.add("");
             lore.add(ChatColor.GREEN + "Click to add this recipe.");
 
             // Another potion uses this recipe
-            for (PotionRecipeObject recipe : PotionUtil.getAllRecipes()) {
+            for (PotionRecipe recipe : PotionUtil.getAllRecipes()) {
                 if (recipe.conflictsWith(resultantRecipe)) {
-                    nextState = nextStateI.clone();
+                    nextState.setAction("recipeBaseInvalid");
                     lore = new ArrayList<>();
                     lore.add("");
                     lore.add(ChatColor.DARK_RED + "You cannot select this as a base potion for a new recipe.");
@@ -590,10 +672,14 @@ public class InventoryGUI {
                 }
             }
 
+            boolean addRecipe = true;
+
             // Current potion has this recipe
-            for (PotionRecipeObject recipe : existingPotion.getRecipes()) {
+            for (PotionRecipe recipe : potion.getRecipes()) {
                 if (recipe.equals(resultantRecipe)) {
-                    nextState = nextStateR.clone();
+                    nextState.setAction("removeRecipeBase");
+                    potion.removeRecipe(recipe);
+                    addRecipe = false;
                     lore = new ArrayList<>();
                     lore.add("");
                     lore.add(ChatColor.RED + "Click to remove this recipe.");
@@ -601,26 +687,34 @@ public class InventoryGUI {
                 }
             }
 
-            nextState.setPotionID(PotionUtil.getIDFromVanillaPotion(vanillaPotion));
-            ItemStack potion = vanillaPotion.clone();
+            if (addRecipe) potion.addRecipe(resultantRecipe);
 
-            ItemStackUtil.addLore(potion, lore);
-            ItemStackUtil.setLocalizedName(potion, nextState.toLocalizedString());
-            potions.add(potion);
+            ItemStackUtil.addLore(vanillaPotion, lore);
+            ItemStackUtil.setLocalizedName(vanillaPotion, nextState.encodeToString());
+            potions.add(vanillaPotion);
         }
 
-        for (PotionObject customPotion : PotionReader.getCustomPotions()) {
-            PotionRecipeObject resultantRecipe = new PotionRecipeObject(recipeIngredient,
-                    customPotion.getPotionID(), existingPotion.getPotionID());
-            LocalizedName nextState = nextStateA.clone();
+        for (Potion customPotion : PotionReader.getCustomPotions()) {
+            Potion potion = state.getPotion();
+
+            // Potion cannot use itself in a recipe
+            if (customPotion.getPotionID().equals(potion.getPotionID())) {
+                continue;
+            }
+
+            PotionRecipe resultantRecipe = new PotionRecipe(recipeIngredient,
+                    customPotion.getPotionID(), potion.getPotionID());
+            State nextState = state.clone();
+            nextState.setAction("addRecipeBase");
+
             List<String> lore = new ArrayList<>();
             lore.add("");
             lore.add(ChatColor.GREEN + "Click to add this recipe.");
 
             // Another potion uses this recipe
-            for (PotionRecipeObject recipe : PotionUtil.getAllRecipes()) {
+            for (PotionRecipe recipe : PotionUtil.getAllRecipes()) {
                 if (recipe.conflictsWith(resultantRecipe)) {
-                    nextState = nextStateI.clone();
+                    nextState.setAction("recipeBaseInvalid");
                     lore = new ArrayList<>();
                     lore.add("");
                     lore.add(ChatColor.DARK_RED + "You cannot select this as a base potion for a new recipe.");
@@ -630,9 +724,9 @@ public class InventoryGUI {
             }
 
             // Current potion has this recipe
-            for (PotionRecipeObject recipe : existingPotion.getRecipes()) {
+            for (PotionRecipe recipe : potion.getRecipes()) {
                 if (recipe.equals(resultantRecipe)) {
-                    nextState = nextStateR.clone();
+                    nextState.setAction("removeRecipeBase");
                     lore = new ArrayList<>();
                     lore.add("");
                     lore.add(ChatColor.RED + "Click to remove this recipe.");
@@ -640,24 +734,25 @@ public class InventoryGUI {
                 }
             }
 
-            nextState.setPotionID(customPotion.getPotionID());
-            ItemStack potion = customPotion.getPotion().clone();
+            ItemStack potionItem = customPotion.toItemStack();
 
-            ItemStackUtil.addLore(potion, lore);
-            ItemStackUtil.setLocalizedName(potion, nextState.toLocalizedString());
-            potions.add(potion);
+            ItemStackUtil.addLore(potionItem, lore);
+            ItemStackUtil.setLocalizedName(potionItem, nextState.encodeToString());
+            potions.add(potionItem);
         }
 
         for (ItemStack potion : potions.subList(page * PAGE_SIZE_C, Math.min((page + 1) * PAGE_SIZE_C, potions.size()))) {
             this.inv.addItem(potion);
         }
+
+        return determineIfNextPage(page, PAGE_SIZE_C, potions.size());
     }
 
     /**
      * Adds a potion for the name menu.
      */
-    private void addNamePotion(LocalizedName state, ItemStack existingPotion) {
-        LocalizedName nextState = state.clone();
+    private void addNamePotion(State state) {
+        State nextState = state.clone();
         nextState.setAction("enterName");
 
         List<String> lore = new ArrayList<>();
@@ -670,8 +765,8 @@ public class InventoryGUI {
         lore.add(ChatColor.GOLD + "Click the left input slot to skip (if you have misclicked).");
         lore.add(ChatColor.RED + "Press ESC to exit without saving.");
 
-        ItemStack potion = existingPotion.clone();
-        ItemStackUtil.setLocalizedName(potion, nextState.toLocalizedString());
+        ItemStack potion = nextState.getPotion().toItemStack();
+        ItemStackUtil.setLocalizedName(potion, nextState.encodeToString());
         ItemStackUtil.addLore(potion, lore);
 
         this.anvilInv.text(ChatColor.RESET + "Enter here:");
@@ -682,13 +777,13 @@ public class InventoryGUI {
     /**
      * Sets final potion slot to the potion for confirmation.
      */
-    private void setFinalPotionSlot(LocalizedName state, PotionObject existingPotion) {
-        LocalizedName nextState = state.clone();
+    private void setFinalPotionSlot(State state) {
+        State nextState = state.clone();
         nextState.setAction("finalInvalid");
 
-        ItemStack potion = existingPotion.getPotion().clone();
-        ItemStackUtil.setLocalizedName(potion, nextState.toLocalizedString());
-        PotionUtil.addLoreRecipes(potion, existingPotion);
+        ItemStack potion = nextState.getPotion().toItemStack();
+        ItemStackUtil.setLocalizedName(potion, nextState.encodeToString());
+        PotionUtil.addLoreRecipes(potion, nextState.getPotion());
 
         this.inv.setItem(FINAL_POTION_SLOT, potion);
     }
@@ -696,13 +791,13 @@ public class InventoryGUI {
     /**
      * Sets edit slot to a selector which brings the user to the first menu.
      */
-    private void setFinalEditSlot(LocalizedName state) {
+    private void setFinalEditSlot(State state) {
         ItemStack edit = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
 
-        LocalizedName nextState = state.clone();
+        State nextState = state.clone();
         nextState.setAction("finalEdit");
 
-        ItemStackUtil.setLocalizedName(edit, nextState.toLocalizedString());
+        ItemStackUtil.setLocalizedName(edit, nextState.encodeToString());
         ItemStackUtil.setDisplayName(edit, ChatColor.GOLD + "Edit the Potion");
 
         List<String> lore = new ArrayList<>();
@@ -715,39 +810,39 @@ public class InventoryGUI {
     /**
      * Sets confirm slot to a selector which confirms and saves the potion.
      */
-    private void setFinalConfirmSlot(LocalizedName state) {
-        ItemStack edit = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
+    private void setFinalConfirmSlot(State state) {
+        ItemStack confirm = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
 
-        LocalizedName nextState = state.clone();
+        State nextState = state.clone();
         nextState.setAction("finalConfirm");
 
-        ItemStackUtil.setLocalizedName(edit, nextState.toLocalizedString());
-        ItemStackUtil.setDisplayName(edit, ChatColor.GREEN + "Save and Confirm");
+        ItemStackUtil.setLocalizedName(confirm, nextState.encodeToString());
+        ItemStackUtil.setDisplayName(confirm, ChatColor.GREEN + "Save and Confirm");
 
         List<String> lore = new ArrayList<>();
         lore.add(ChatColor.GOLD + "Click to save your potion.");
-        ItemStackUtil.addLore(edit, lore);
+        ItemStackUtil.addLore(confirm, lore);
 
-        this.inv.setItem(FINAL_CONFIRM_SLOT, edit);
+        this.inv.setItem(FINAL_CONFIRM_SLOT, confirm);
     }
 
     /**
      * Sets exit slot to a selector which exits the menu without saving changes to the potion.
      */
-    private void setFinalExitSlot(LocalizedName state) {
-        ItemStack edit = new ItemStack(Material.RED_STAINED_GLASS_PANE);
+    private void setFinalExitSlot(State state) {
+        ItemStack exit = new ItemStack(Material.RED_STAINED_GLASS_PANE);
 
-        LocalizedName nextState = state.clone();
+        State nextState = state.clone();
         nextState.setAction("exit");
 
-        ItemStackUtil.setLocalizedName(edit, nextState.toLocalizedString());
-        ItemStackUtil.setDisplayName(edit, ChatColor.RED + "Exit without Saving");
+        ItemStackUtil.setLocalizedName(exit, nextState.encodeToString());
+        ItemStackUtil.setDisplayName(exit, ChatColor.RED + "Exit without Saving");
 
         List<String> lore = new ArrayList<>();
         lore.add(ChatColor.GOLD + "Click to exit without saving any changes.");
-        ItemStackUtil.addLore(edit, lore);
+        ItemStackUtil.addLore(exit, lore);
 
-        this.inv.setItem(FINAL_EXIT_SLOT, edit);
+        this.inv.setItem(FINAL_EXIT_SLOT, exit);
     }
 
     public static List<String> getAllMenus() {

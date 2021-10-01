@@ -6,7 +6,6 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
-import xyz.iiinitiationnn.custompotions.utils.ColourUtil;
 
 public class Commands implements CommandExecutor {
     private final Main pluginInstance;
@@ -100,7 +99,7 @@ public class Commands implements CommandExecutor {
                 return false;
             }
 
-            InventoryGUI next = new InventoryGUI();
+            InventoryGUI next = new InventoryGUI(new State());
             next.openInv(sender);
 
             sender.sendMessage(ChatColor.GOLD + "TO BE IMPLEMENTED");
@@ -132,7 +131,7 @@ public class Commands implements CommandExecutor {
 
         // Debug
         else if (args[0].equalsIgnoreCase("debug")) {
-            PotionObject.debugCustomPotions();
+            Potion.debugCustomPotions();
             return true;
         }
 
