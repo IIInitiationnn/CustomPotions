@@ -1,7 +1,5 @@
 package xyz.iiinitiationnn.custompotions.utils;
 
-import xyz.iiinitiationnn.custompotions.Potion;
-
 public class MagicNumber {
     public static final int lingeringPotionMaxDuration = 26843545;
     public static final int regularPotionMaxDuration = 107374182;

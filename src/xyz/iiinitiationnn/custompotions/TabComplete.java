@@ -21,14 +21,13 @@ public class TabComplete implements TabCompleter {
 
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command cmd, @NotNull String label, String[] args) {
         if (arguments.isEmpty()) {
-            if (sender.hasPermission("custompotions.brew")) {
+            if (Permissions.hasBrew(sender)) {
                 arguments.add("info");
-                arguments.add("list");
             }
-            if (sender.hasPermission("custompotions.reload")) {
+            if (Permissions.hasReload(sender)) {
                 arguments.add("reload");
             }
-            if (sender.hasPermission("custompotions.modify")) {
+            if (Permissions.hasModify(sender)) {
                 arguments.add("modify");
                 arguments.add("give");
             }

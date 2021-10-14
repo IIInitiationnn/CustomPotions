@@ -1,16 +1,20 @@
 package xyz.iiinitiationnn.custompotions.listeners;
 
-import org.bukkit.Material;
+import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffectType;
-import xyz.iiinitiationnn.custompotions.*;
-import org.bukkit.event.Listener;
+import xyz.iiinitiationnn.custompotions.Main;
+import xyz.iiinitiationnn.custompotions.PotionEffectSerializable;
+import xyz.iiinitiationnn.custompotions.PotionRecipe;
+import xyz.iiinitiationnn.custompotions.State;
+import xyz.iiinitiationnn.custompotions.gui.InventoryGUI;
 import xyz.iiinitiationnn.custompotions.utils.ItemStackUtil;
 import xyz.iiinitiationnn.custompotions.utils.MagicNumber;
 import xyz.iiinitiationnn.custompotions.utils.PotionUtil;
@@ -19,7 +23,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 
 public class InventoryGUIListener implements Listener {
-    // action: exit, skipL, skipR, pageNext, pagePrevious, pageInvalid, createPotion, selectPotion, selectType,
+    // action: forceExit, exit, skipL, skipR, pageNext, pagePrevious, pageInvalid, createPotion, selectPotion, selectType,
     //         selectColour, noEffects, addEffectType, selectEffectType, enterEffectDuration, enterEffectAmplifier,
     //         addRecipeIngredient, selectRecipeIngredient, addRecipeBase, removeRecipeBase, recipeBaseInvalid,
     //         enterName, finalInvalid, finalEdit, finalConfirm, give
@@ -39,19 +43,32 @@ public class InventoryGUIListener implements Listener {
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
             // Not a State class
-            // TODO may need to test if another class is encoded in the name but not a State e.g. diff plugin uses it
             return;
         }
-        Main.log.info(state.getAction() + " " + state.getMenu());
+        Main.log.info(state.getAction() + " " + state.getMenuName());
         // TODO prevent placing in the custom inventories, including dragging event
         //  is this covered by interaction == null? (for the placing part)
 
         event.setCancelled(true);
         State nextState = state.clone();
         switch (state.getAction()) {
+            case "forceExit":
+                event.getWhoClicked().closeInventory();
+                event.getWhoClicked().sendMessage(ChatColor.RED + "Your changes have not been saved.");
+                return;
             case "exit":
-                // TODO
-                break;
+                if (event.getClick() == ClickType.LEFT) {
+                    // save and exit
+                    Main.fileData.writeData(nextState.getPotion());
+                    event.getWhoClicked().closeInventory();
+                    event.getWhoClicked().sendMessage(ChatColor.GREEN + "Your changes to "
+                        + state.getPotion().getName() + ChatColor.GREEN + " have been saved.");
+                } else if (event.getClick() == ClickType.RIGHT) {
+                    // exit without saving
+                    event.getWhoClicked().closeInventory();
+                    event.getWhoClicked().sendMessage(ChatColor.RED + "Your changes have not been saved.");
+                }
+                return;
             case "skipL":
                 nextState.skipPreviousMenu();
                 break;
@@ -70,28 +87,34 @@ public class InventoryGUIListener implements Listener {
             case "selectType":
             case "selectColour":
                 nextState.nextMenu();
+                nextState.setPage(0);
                 break;
             case "selectPotion":
                 if (event.getClick() == ClickType.LEFT) {
                     // modify
                     nextState.nextMenu();
-                    nextState.getPotion().debugCustomPotion(); // hhh
+                    /*nextState.getPotion().debugCustomPotion(); // hhh*/
                 } else if (event.getClick() == ClickType.RIGHT) {
-                    // remove TODO
+                    // remove TODO are you sure prompt
                 } else if (event.getClick() == ClickType.SHIFT_LEFT) {
                     // clone
                     nextState.nextMenu();
                     nextState.setPotion(nextState.getPotion().duplicate());
-                    state.getPotion().debugCustomPotion(); // hhh
-                    nextState.getPotion().debugCustomPotion(); // hhh
+                    /*state.getPotion().debugCustomPotion(); // hhh
+                    nextState.getPotion().debugCustomPotion(); // hhh*/
+                } else {
+                    return;
                 }
+                nextState.setPage(0);
                 break;
             case "noEffects":
                 nextState.skipNextMenu();
+                nextState.setPage(0);
                 nextState.getPotion().setEffects(new ArrayList<>());
                 break;
             case "addEffectType":
                 nextState.nextMenu();
+                nextState.setPage(0);
                 nextState.getInput().setEffectType(ItemStackUtil.getDisplayName(event.getCurrentItem()));
                 break;
             case "selectEffectType":
@@ -99,8 +122,12 @@ public class InventoryGUIListener implements Listener {
                     // modify
                     nextState.nextMenu();
                     nextState.getInput().setEffectType(ItemStackUtil.getDisplayName(event.getCurrentItem()));
+                    nextState.setPage(0);
                 } else if (event.getClick() == ClickType.RIGHT) {
-                    // remove TODO
+                    // remove
+                    nextState.getPotion().removeEffectByName(ItemStackUtil.getDisplayName(event.getCurrentItem()));
+                } else {
+                    return;
                 }
                 break;
             case "enterEffectDuration":
@@ -133,6 +160,7 @@ public class InventoryGUIListener implements Listener {
                     } catch (Exception ignored) {
                     }
                 }
+                nextState.setPage(0);
                 break;
             case "enterEffectAmplifier":
                 if (event.getSlot() == MagicNumber.anvilLeftInputSlot) {
@@ -159,33 +187,64 @@ public class InventoryGUIListener implements Listener {
                     } catch (Exception ignored) {
                     }
                 }
+                nextState.setPage(0);
                 break;
             case "addRecipeIngredient":
                 nextState.nextMenu();
+                nextState.setPage(0);
                 nextState.getInput().setMaterial(event.getCurrentItem().getType().name());
                 break;
             case "selectRecipeIngredient":
                 if (event.getClick() == ClickType.LEFT) {
                     // modify
                     nextState.nextMenu();
+                    nextState.setPage(0);
                     nextState.getInput().setMaterial(event.getCurrentItem().getType().name());
                 } else if (event.getClick() == ClickType.RIGHT) {
-                    // remove TODO
+                    // remove TODO removeByIngredientName or watever
+                } else {
+                    return;
                 }
+                break;
             case "addRecipeBase":
                 nextState.nextMenu();
+                nextState.setPage(0);
                 break;
             case "removeRecipeBase":
-                nextState.nextMenu();
-                nextState.nextMenu();
                 break;
             case "recipeBaseInvalid":
                 return;
             case "enterName":
+                if (event.getSlot() == MagicNumber.anvilLeftInputSlot) {
+                    // Skip
+                    nextState.skipNextMenu();
+                } else if (event.getSlot() == MagicNumber.anvilRightInputSlot) {
+                    // Invalid
+                     return;
+                } else if (event.getSlot() == MagicNumber.anvilOutputSlot) {
+                    // Continue
+                    nextState.nextMenu();
+                    String name = ChatColor.stripColor(ItemStackUtil.getDisplayName(event.getCurrentItem()));
+                    if (!name.contains("&")) name = ChatColor.WHITE + name;
+                    name = ChatColor.translateAlternateColorCodes('&', name);
+                    nextState.getPotion().setName(name);
+                }
+                nextState.setPage(0);
+                break;
             case "finalInvalid":
+                return;
             case "finalEdit":
+                nextState.nextMenu();
+                nextState.nextMenu();
+                break;
             case "finalConfirm":
+                Main.fileData.writeData(nextState.getPotion());
+                event.getWhoClicked().closeInventory();
+                event.getWhoClicked().sendMessage(ChatColor.GREEN + "Your changes to "
+                    + state.getPotion().getName() + ChatColor.GREEN + " have been saved.");
+                return;
             case "give":
+                break;
         }
         (new InventoryGUI(nextState)).openInv(player);
 

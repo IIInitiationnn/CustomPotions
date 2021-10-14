@@ -4,12 +4,10 @@ import org.apache.commons.lang.Validate;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.bukkit.Color;
-import xyz.iiinitiationnn.custompotions.utils.ColourUtil;
 
 import java.io.Serializable;
 import java.util.List;
 
-import static xyz.iiinitiationnn.custompotions.utils.ColourUtil.getChatColor;
 import static xyz.iiinitiationnn.custompotions.utils.ColourUtil.randomDefaultColour;
 
 public class Colour implements Serializable {
@@ -123,11 +121,11 @@ public class Colour implements Serializable {
 
     @Override
     public int hashCode() {
-        return new HashCodeBuilder(17, 31). // two randomly chosen prime numbers
-            append(this.r).
-            append(this.g).
-            append(this.b).
-            toHashCode();
+        return new HashCodeBuilder(17, 31) // two randomly chosen prime numbers
+            .append(this.r)
+            .append(this.g)
+            .append(this.b)
+            .toHashCode();
     }
 
     @Override
@@ -138,11 +136,11 @@ public class Colour implements Serializable {
             return true;
 
         Colour c = (Colour) obj;
-        return new EqualsBuilder().
-            append(this.r, c.r).
-            append(this.g, c.g).
-            append(this.b, c.b).
-            isEquals();
+        return new EqualsBuilder()
+            .append(this.r, c.r)
+            .append(this.g, c.g)
+            .append(this.b, c.b)
+            .isEquals();
     }
 
 

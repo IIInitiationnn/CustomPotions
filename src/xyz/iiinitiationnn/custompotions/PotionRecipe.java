@@ -3,6 +3,8 @@ package xyz.iiinitiationnn.custompotions;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.bukkit.Material;
+import org.bukkit.inventory.ItemStack;
+import xyz.iiinitiationnn.custompotions.utils.PotionUtil;
 
 import java.io.Serializable;
 
@@ -15,6 +17,16 @@ public class PotionRecipe implements Serializable {
         this.ingredient = ingredient;
         this.base = base;
         this.result = result;
+    }
+
+    // Base is vanilla potion
+    public PotionRecipe(Material ingredient, ItemStack base, Potion result) {
+        this(ingredient, PotionUtil.getIdFromVanillaPotion(base), result.getPotionId());
+    }
+
+    // Base is custom potion
+    public PotionRecipe(Material ingredient, Potion base, Potion result) {
+        this(ingredient, base.getPotionId(), result.getPotionId());
     }
 
     public Material getIngredient() {
@@ -48,11 +60,11 @@ public class PotionRecipe implements Serializable {
 
     @Override
     public int hashCode() {
-        return new HashCodeBuilder(17, 31). // two randomly chosen prime numbers
-            append(this.ingredient).
-            append(this.base).
-            append(this.result).
-            toHashCode();
+        return new HashCodeBuilder(17, 31) // two randomly chosen prime numbers
+            .append(this.ingredient)
+            .append(this.base)
+            .append(this.result)
+            .toHashCode();
     }
 
     @Override
@@ -63,11 +75,11 @@ public class PotionRecipe implements Serializable {
             return true;
 
         PotionRecipe r = (PotionRecipe) obj;
-        return new EqualsBuilder().
-            append(this.ingredient, r.ingredient).
-            append(this.base, r.base).
-            append(this.result, r.result).
-            isEquals();
+        return new EqualsBuilder()
+            .append(this.ingredient, r.ingredient)
+            .append(this.base, r.base)
+            .append(this.result, r.result)
+            .isEquals();
     }
 
 }

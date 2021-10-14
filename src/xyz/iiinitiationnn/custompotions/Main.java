@@ -1,29 +1,15 @@
 package xyz.iiinitiationnn.custompotions;
 
-import org.bukkit.ChatColor;
-import org.bukkit.command.CommandSender;
-import org.bukkit.command.PluginCommand;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryType;
-import org.bukkit.inventory.BrewerInventory;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.potion.PotionData;
-import org.bukkit.potion.PotionType;
 import xyz.iiinitiationnn.custompotions.listeners.BrewingStandListener;
 import xyz.iiinitiationnn.custompotions.listeners.InventoryGUIListener;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.logging.Logger;
 
 public class Main extends JavaPlugin {
     public static Logger log;
-    public Data potionData;
+    public static FileData fileData;
 
     // TODO
     //  potentially playing around with lore for potion effects to show the correct potency, and time in day:hour:minute:second if applicable
@@ -40,15 +26,16 @@ public class Main extends JavaPlugin {
     //  when changing lingering <-> normal / splash, adjust the durations of all effects accordingly instead of letting it x4 or /4
     // TODO new "colours.yml" file where they can customise colours
 
-    // Startup
-    @java.lang.Override
+    /**
+     * Startup & initialisation.
+     */
+    @Override
     public void onEnable() {
         log = this.getLogger();
         log.info("Initialising CustomPotions and validating potions.");
 
-        this.potionData = new Data(this);
-        this.potionData.saveDefaultData();
-        saveDefaultConfig();
+        fileData = new FileData(this);
+        this.saveDefaultConfig();
 
         PluginManager pm = getServer().getPluginManager();
         BrewingStandListener brewingStandListener = new BrewingStandListener();
@@ -56,29 +43,38 @@ public class Main extends JavaPlugin {
         pm.registerEvents(brewingStandListener, this);
         pm.registerEvents(inventoryGUIListener, this);
 
-        getCommand("custompotions").setExecutor(new Commands(this));
-        getCommand("custompotions").setTabCompleter(new TabComplete(this));
+        this.getCommand("custompotions").setExecutor(new Commands(this));
+        this.getCommand("custompotions").setTabCompleter(new TabComplete(this));
     }
 
-    // Reload
+    /**
+     * Reloading the plugin.
+     */
     public void reload() {
-        this.potionData.reloadData();
-        getCommand("custompotions").setExecutor(new Commands(this));
-        getCommand("custompotions").setTabCompleter(new TabComplete(this));
+        fileData.reloadData();
+        this.getCommand("custompotions").setExecutor(new Commands(this));
+        this.getCommand("custompotions").setTabCompleter(new TabComplete(this));
     }
 
-    // Stop
-    @java.lang.Override
+    /**
+     * Terminating the server or plugin.
+     */
+    @Override
     public void onDisable() {
         log.info("CustomPotions has been disabled.");
     }
 
-    public boolean permissionDenied(CommandSender sender) {
-        sender.sendMessage(ChatColor.DARK_RED + "You do not have permission to run this command.");
-        log.info(ChatColor.RED + "" + sender.getName() + ChatColor.DARK_RED + " was denied access to command.");
-        return false;
+    public static void logInfo(String string) {
+        log.info(string);
     }
 
+    public static void logWarning(String string) {
+        log.warning(string);
+    }
+
+    public static void logSevere(String string) {
+        log.severe(string);
+    }
 
 
     /*

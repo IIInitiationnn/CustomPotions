@@ -4,7 +4,6 @@ import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-
 import xyz.iiinitiationnn.custompotions.Main;
 
 import java.util.List;
@@ -31,7 +30,7 @@ public class ItemStackUtil {
     public static void setLocalizedName(ItemStack item, String name) {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
-            Main.log.severe("There was an error retrieving the item metadata when setting the localized name.");
+            Main.logSevere("There was an error retrieving the item metadata when setting the localized name.");
             return;
         }
         meta.setLocalizedName(name);
@@ -44,7 +43,7 @@ public class ItemStackUtil {
     public static String getLocalizedName(ItemStack item) {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
-            Main.log.severe("There was an error retrieving the item metadata when getting the localized name.");
+            Main.logSevere("There was an error retrieving the item metadata when getting the localized name.");
             return "";
         }
         return meta.getLocalizedName();
@@ -53,7 +52,7 @@ public class ItemStackUtil {
     public static String getDisplayName(ItemStack item) {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
-            Main.log.severe("There was an error retrieving the item metadata when getting the display name.");
+            Main.logSevere("There was an error retrieving the item metadata when getting the display name.");
             return "";
         }
         return ChatColor.stripColor(meta.getDisplayName());
@@ -65,7 +64,7 @@ public class ItemStackUtil {
     public static void setDisplayName(ItemStack item, String name) {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
-            Main.log.severe("There was an error retrieving the item metadata when setting the display name.");
+            Main.logSevere("There was an error retrieving the item metadata when setting the display name.");
             return;
         }
         meta.setDisplayName(name);
@@ -78,7 +77,7 @@ public class ItemStackUtil {
     private static void setLore(ItemStack item, List<String> lore) {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
-            Main.log.severe("There was an error retrieving the item metadata when setting the lore.");
+            Main.logSevere("There was an error retrieving the item metadata when setting the lore.");
             return;
         }
         meta.setLore(lore);
@@ -91,7 +90,7 @@ public class ItemStackUtil {
     public static void addLore(ItemStack item, List<String> lore) {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
-            Main.log.severe("There was an error retrieving the item metadata when adding lore.");
+            Main.logSevere("There was an error retrieving the item metadata when adding lore.");
             return;
         }
         List<String> fullLore = lore;

@@ -1,6 +1,11 @@
 package xyz.iiinitiationnn.custompotions;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.util.Base64;
 
 /**
@@ -20,7 +25,7 @@ public class State implements Cloneable, Serializable {
 
     // Instance Variables
     private Potion potion;
-    private String menu;
+    private Menu menu;
     private int page; // starts at 0
     private String action;
     private Input input = new Input();
@@ -30,8 +35,8 @@ public class State implements Cloneable, Serializable {
      * Constructs a state for startup.
      */
     public State() {
-        this.potion = new Potion();
-        this.menu = "mainMenu";
+        this.potion = new Potion(true);
+        this.menu = new Menu();
         this.page = 0;
         this.action = "createPotion";
     }
@@ -43,8 +48,9 @@ public class State implements Cloneable, Serializable {
     public State clone() {
         try {
             State s = (State) super.clone();
-            s.potion = potion.clone();
-            s.input = input.clone();
+            s.menu = this.menu.clone();
+            s.potion = this.potion.clone();
+            s.input = this.input.clone();
             return s;
         } catch (CloneNotSupportedException var2) {
             throw new Error(var2);
@@ -55,32 +61,13 @@ public class State implements Cloneable, Serializable {
         this.potion = potion;
     }
     public void nextMenu() {
-        if (this.menu.equals("effectAmplifier")) {
-            // After creating a new effect, return to the effects menu screen
-            this.menu = "effectType";
-        } else if (this.menu.equals("recipeBase")) {
-            this.menu = "recipeIngredient";
-        } else {
-            this.menu = InventoryGUI.getMenuAfter(this.menu);
-        }
+        this.menu.nextMenu();
     }
     public void skipNextMenu() {
-        if (this.menu.equals("effectType") || this.menu.equals("effectDuration") || this.menu.equals("effectAmplifier")) {
-            this.menu = "recipeIngredient";
-        } else if (this.menu.equals("recipeIngredient")) {
-            this.menu = "potionName";
-        } else {
-            this.menu = InventoryGUI.getMenuAfter(this.menu);
-        }
+        this.menu.skipNextMenu();
     }
     public void skipPreviousMenu() {
-        if (this.menu.equals("recipeIngredient")) {
-            this.menu = "effectType";
-        } else if (this.menu.equals("potionName")) {
-            this.menu = "recipeIngredient";
-        } else {
-            this.menu = InventoryGUI.getMenuBefore(this.menu);
-        }
+        this.menu.skipPreviousMenu();
     }
     public void setPage(int page) {
         this.page = page;
@@ -92,8 +79,8 @@ public class State implements Cloneable, Serializable {
     public Potion getPotion() {
         return this.potion;
     }
-    public String getMenu() {
-        return this.menu;
+    public String getMenuName() {
+        return this.menu.getName();
     }
     public int getPage() {
         return this.page;

@@ -6,6 +6,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import xyz.iiinitiationnn.custompotions.gui.InventoryGUI;
 
 public class Commands implements CommandExecutor {
     private final Main pluginInstance;
@@ -21,21 +22,21 @@ public class Commands implements CommandExecutor {
         }
 
         // Display help prompt with available commands
+        // TODO hover and clickable
         if (args.length == 0) {
             // Insufficient permissions
-            if (!sender.hasPermission("custompotions.reload") && !sender.hasPermission("custompotions.modify") &&
-                    !sender.hasPermission("custompotions.brew")) {
-                return pluginInstance.permissionDenied(sender);
+            if (Permissions.hasNone(sender)) {
+                return Permissions.sendDeniedMessage(sender);
             }
 
             sender.sendMessage(ChatColor.GOLD + "CustomPotions commands you have access to:");
             String prefix = ChatColor.GOLD + "/" + label;
-            if (sender.hasPermission("custompotions.reload"))
+            if (Permissions.hasReload(sender))
                 sender.sendMessage(prefix + " reload" + ChatColor.WHITE + ": reloads the config and plugin.");
-            if (sender.hasPermission("custompotions.modify"))
+            if (Permissions.hasModify(sender))
                 sender.sendMessage(prefix + " modify" + ChatColor.WHITE + ": allows you to edit and create new potions with custom effects.");
                 sender.sendMessage(prefix + " give" + ChatColor.WHITE + ": allows you to withdraw a custom potion.");
-            if (sender.hasPermission("custompotions.brew"))
+            if (Permissions.hasBrew(sender))
                 sender.sendMessage(prefix + " info" + ChatColor.WHITE + ": displays information about all custom potions.");
             return true;
         }
@@ -47,8 +48,8 @@ public class Commands implements CommandExecutor {
             //  and clicking on the item will take you back
 
             // Insufficient permissions
-            if (!sender.hasPermission("custompotions.brew")) {
-                return pluginInstance.permissionDenied(sender);
+            if (!Permissions.hasBrew(sender)) {
+                return Permissions.sendDeniedMessage(sender);
             }
 
             // Incorrect usage
@@ -64,8 +65,8 @@ public class Commands implements CommandExecutor {
         // Reloads plugin
         else if (args[0].equalsIgnoreCase("reload")) {
             // Insufficient permissions
-            if (!sender.hasPermission("custompotions.reload")) {
-                return pluginInstance.permissionDenied(sender);
+            if (!Permissions.hasReload(sender)) {
+                return Permissions.sendDeniedMessage(sender);
             }
 
             // Incorrect usage
@@ -83,8 +84,8 @@ public class Commands implements CommandExecutor {
         // Modify or create new potions
         else if (args[0].equalsIgnoreCase("modify")) {
             // Insufficient permissions
-            if (!sender.hasPermission("custompotions.modify")) {
-                return pluginInstance.permissionDenied(sender);
+            if (!Permissions.hasModify(sender)) {
+                return Permissions.sendDeniedMessage(sender);
             }
 
             // Not a player
@@ -101,16 +102,14 @@ public class Commands implements CommandExecutor {
 
             InventoryGUI next = new InventoryGUI(new State());
             next.openInv(sender);
-
-            sender.sendMessage(ChatColor.GOLD + "TO BE IMPLEMENTED");
             return true;
         }
 
         // Give potions to player
         else if (args[0].equalsIgnoreCase("give")) {
             // Insufficient permissions
-            if (!sender.hasPermission("custompotions.modify")) {
-                return pluginInstance.permissionDenied(sender);
+            if (!Permissions.hasModify(sender)) {
+                return Permissions.sendDeniedMessage(sender);
             }
 
             // Not a player
