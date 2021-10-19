@@ -136,6 +136,9 @@ public class Potion implements Serializable, Cloneable {
     public void removeEffectByName(String name) {
         this.effects.removeIf(effect -> Objects.equals(effect.getType().getName(), name));
     }
+    public void removeRecipesByIngredient(String name) {
+        this.recipes.removeIf(recipe -> Objects.equals(recipe.getIngredient().name(), name));
+    }
 
     /**
      * Not to be confused with cloning the object; this duplicates the potion with a new ID.

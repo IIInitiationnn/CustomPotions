@@ -4,8 +4,8 @@ import java.io.Serializable;
 
 public class Input implements Serializable, Cloneable {
     private String effectType;
-    private int effectDuration;
-    private String material;
+    private int effectDuration; // ticks
+    private String ingredient;
 
     public Input clone() {
         try {
@@ -23,8 +23,8 @@ public class Input implements Serializable, Cloneable {
         return this.effectDuration;
     }
 
-    public String getMaterial() {
-        return this.material;
+    public String getIngredient() {
+        return this.ingredient;
     }
 
     public void setEffectType(String effectType) {
@@ -36,8 +36,8 @@ public class Input implements Serializable, Cloneable {
     }
 
 
-    public void setMaterial(String material) {
-        this.material = material;
+    public void setIngredient(String ingredient) {
+        this.ingredient = ingredient;
     }
 
 

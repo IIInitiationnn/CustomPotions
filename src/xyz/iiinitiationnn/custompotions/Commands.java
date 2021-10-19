@@ -6,7 +6,9 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
-import xyz.iiinitiationnn.custompotions.gui.InventoryGUI;
+import xyz.iiinitiationnn.custompotions.gui.GUI;
+import xyz.iiinitiationnn.custompotions.states.GiveMenu;
+import xyz.iiinitiationnn.custompotions.states.MainMenu;
 
 public class Commands implements CommandExecutor {
     private final Main pluginInstance;
@@ -100,8 +102,9 @@ public class Commands implements CommandExecutor {
                 return false;
             }
 
-            InventoryGUI next = new InventoryGUI(new State());
-            next.openInv(sender);
+            new GUI(new MainMenu(), (Player) sender)
+                .nextState()
+                .open();
             return true;
         }
 
@@ -124,7 +127,9 @@ public class Commands implements CommandExecutor {
                 return false;
             }
 
-            sender.sendMessage(ChatColor.GOLD + "TO BE IMPLEMENTED");
+            new GUI(new GiveMenu(), (Player) sender)
+                .nextState()
+                .open();
             return true;
         }
 

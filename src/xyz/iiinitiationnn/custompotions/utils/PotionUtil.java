@@ -16,6 +16,7 @@ import xyz.iiinitiationnn.custompotions.PotionRecipe;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 public class PotionUtil {
@@ -45,16 +46,20 @@ public class PotionUtil {
     }
 
     public static boolean isValidDuration(boolean isLingering, int duration) {
-        return (isLingering && 1 <= duration && duration <= MagicNumber.lingeringPotionMaxDuration) ||
-            (!isLingering && 1 <= duration && duration <= MagicNumber.regularPotionMaxDuration);
+        return (isLingering && 1 <= duration && duration <= MagicNumber.LINGERING_MAX_DURATION) ||
+            (!isLingering && 1 <= duration && duration <= MagicNumber.REGULAR_MAX_DURATION);
     }
 
     public static int secondsToTicks(boolean isLingering, int duration) {
-        return isLingering ? duration * MagicNumber.lingeringTickMultiplier : duration * MagicNumber.regularTickMultiplier;
+        return isLingering ? duration * MagicNumber.LINGERING_TICK_MULTIPLIER : duration * MagicNumber.REGULAR_TICK_MULTIPLIER;
+    }
+
+    public static boolean isInstant(String effectName) {
+        return Objects.equals(effectName, "HARM") || Objects.equals(effectName, "HEAL");
     }
 
     /**
-     * Given a potion effect, return its maximum amplifier.
+     * Return a given potion effect's maximum amplifier.
      */
     public static int maxAmp(String effectName) {
         switch (effectName) {
@@ -82,6 +87,13 @@ public class PotionUtil {
             default:
                 return 127;
         }
+    }
+
+    /**
+     * Determines if a given potion effect has only a single amplifier (I).
+     */
+    public static boolean hasSingleAmplifier(String effectName) {
+        return maxAmp(effectName) == 0;
     }
 
     public static boolean isValidAmp(String effectName, int amplifier) {

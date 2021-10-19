@@ -10,9 +10,12 @@ import xyz.iiinitiationnn.custompotions.Main;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 public class ColourUtil {
+    // TODO clean this up, integrate with colours.yml
+
     /**
      * Selects a random default potion Colour.
      */
@@ -51,8 +54,8 @@ public class ColourUtil {
      * Key: (String) Colour name.
      * Value: (Colour) Colour.
      */
-    public static HashMap<String, Colour> defaultPotionColourMap() {
-        HashMap<String, Colour> colourMap = new HashMap<>();
+    public static Map<String, Colour> defaultPotionColourMap() {
+        Map<String, Colour> colourMap = new HashMap<>();
         colourMap.put("Red", new Colour(0xFF, 0x00, 0x00));
         colourMap.put("Orange", new Colour(0xFF, 0xA5, 0x00));
         colourMap.put("Yellow", new Colour(0xFF, 0xFF, 0x00));
