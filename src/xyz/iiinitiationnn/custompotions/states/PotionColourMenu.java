@@ -39,7 +39,7 @@ public class PotionColourMenu extends State {
      * Fetches potions for the potion colour selection menu.
      */
     @Override
-    public List<ItemStack> calculatePotions() {
+    public List<ItemStack> calculateInventoryItems() {
         State nextStateBase = this.clone();
         nextStateBase.setAction(new SelectPotionColourAction());
         List<Colour> colours = ColourUtil.defaultPotionColourList();
@@ -54,7 +54,7 @@ public class PotionColourMenu extends State {
             ItemStackUtil.setLocalizedName(potion, nextState.encodeToString());
 
             ChatColor c = ColourUtil.getChatColor(colour);
-            ItemStackUtil.setDisplayName(potion, c + ColourUtil.defaultPotionColourMapReverse().get(colour));
+            ItemStackUtil.setDisplayName(potion, c + ColourUtil.potionColours().get(colour));
             allPotions.add(potion);
         }
 

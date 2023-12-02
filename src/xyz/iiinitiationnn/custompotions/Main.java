@@ -20,11 +20,13 @@ public class Main extends JavaPlugin {
     //  when doing cp info, maybe find all potions which use it as a predecessor
     //  dont allow ESC to exit from nonanvil menus
     //  notify server when new version is available
-    //  parse effect duration eg. seconds, minutes, ticks
+    //  parse effect duration eg. seconds, minutes, ticks like Audacious' events
     //  whenever "There was an error" put : instead of . and then print the trace
     //  instant damage: skip duration????
     //  when changing lingering <-> normal / splash, adjust the durations of all effects accordingly instead of letting it x4 or /4
-    // TODO new "colours.yml" file where they can customise colours
+    //  - new "colours.yml" file where they can customise colours
+    //  - prevent closing of main inventory
+    //  - log the input of the state; check that it is being maintained correctly
 
     /**
      * Startup & initialisation.

@@ -37,38 +37,38 @@ public class PotionTypeMenu extends State {
      * potions, splash potions, and lingering potions.
      */
     @Override
-    public List<ItemStack> calculatePotions() {
+    public List<ItemStack> calculateInventoryItems() {
         State nextStateBase = this.clone();
         nextStateBase.setAction(new SelectPotionTypeAction());
-        ChatColor potionColour = ColourUtil.getChatColor(nextStateBase.getPotionItemStack());
+        ChatColor chatColor = this.getPotionChatColor();
 
         List<ItemStack> allPotions = new ArrayList<>();
 
         // Potion
         State nextStateP = nextStateBase.clone();
-        nextStateP.getPotion().setType(Material.POTION);
-        ItemStack potion = nextStateP.getPotion().toItemStack();
+        nextStateP.setPotionType(Material.POTION);
+        ItemStack potion = nextStateP.getPotionItemStack();
 
         ItemStackUtil.setLocalizedName(potion, nextStateP.encodeToString());
-        ItemStackUtil.setDisplayName(potion, potionColour + "Potion");
+        ItemStackUtil.setDisplayName(potion, chatColor + "Potion");
         allPotions.add(potion);
 
         // Splash Potion
         State nextStateS = nextStateBase.clone();
-        nextStateS.getPotion().setType(Material.SPLASH_POTION);
-        ItemStack splashPotion = nextStateS.getPotion().toItemStack();
+        nextStateS.setPotionType(Material.SPLASH_POTION);
+        ItemStack splashPotion = nextStateS.getPotionItemStack();
 
         ItemStackUtil.setLocalizedName(splashPotion, nextStateS.encodeToString());
-        ItemStackUtil.setDisplayName(splashPotion, potionColour + "Splash Potion");
+        ItemStackUtil.setDisplayName(splashPotion, chatColor + "Splash Potion");
         allPotions.add(splashPotion);
 
         // Lingering Potion
         State nextStateL = nextStateBase.clone();
-        nextStateL.getPotion().setType(Material.LINGERING_POTION);
-        ItemStack lingeringPotion = nextStateL.getPotion().toItemStack();
+        nextStateL.setPotionType(Material.LINGERING_POTION);
+        ItemStack lingeringPotion = nextStateL.getPotionItemStack();
 
         ItemStackUtil.setLocalizedName(lingeringPotion, nextStateL.encodeToString());
-        ItemStackUtil.setDisplayName(lingeringPotion, potionColour + "Lingering Potion");
+        ItemStackUtil.setDisplayName(lingeringPotion, chatColor + "Lingering Potion");
         allPotions.add(lingeringPotion);
 
         return allPotions;

@@ -5,6 +5,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffectType;
 import xyz.iiinitiationnn.custompotions.Actions.Action;
 import xyz.iiinitiationnn.custompotions.Actions.ExitSelectAction;
 import xyz.iiinitiationnn.custompotions.Actions.InvalidAction;
@@ -17,6 +18,7 @@ import xyz.iiinitiationnn.custompotions.Input;
 import xyz.iiinitiationnn.custompotions.Main;
 import xyz.iiinitiationnn.custompotions.Potion;
 import xyz.iiinitiationnn.custompotions.PotionEffectSerializable;
+import xyz.iiinitiationnn.custompotions.PotionRecipe;
 import xyz.iiinitiationnn.custompotions.inventorytypes.InventoryType;
 import xyz.iiinitiationnn.custompotions.utils.ItemStackUtil;
 import xyz.iiinitiationnn.custompotions.utils.MagicNumber;
@@ -98,12 +100,28 @@ public abstract class State implements Cloneable, Serializable {
         return this.existingPotion;
     } // TODO phase out chained uses
 
+    public String getPotionId() {
+        return this.existingPotion.getPotionId();
+    }
+
     public String getPotionName() {
         return this.existingPotion.getName();
     }
 
+    public ChatColor getPotionChatColor() {
+        return this.existingPotion.getCorrespondingChatColor();
+    }
+
+    public List<PotionRecipe> getPotionRecipes() {
+        return this.existingPotion.getRecipes();
+    }
+
     public boolean isPotionLingering() {
         return this.existingPotion.isLingering();
+    }
+
+    public boolean hasPotionEffect(PotionEffectType effectType) {
+        return this.existingPotion.hasEffect(effectType);
     }
 
     public ItemStack getPotionItemStack() {
@@ -149,6 +167,11 @@ public abstract class State implements Cloneable, Serializable {
         return this;
     }
 
+    public State setPotionType(Material type) {
+        this.existingPotion.setType(type);
+        return this;
+    }
+
     public State addPotionEffect(PotionEffectSerializable effect) {
         this.existingPotion.addEffect(effect);
         return this;
@@ -161,6 +184,11 @@ public abstract class State implements Cloneable, Serializable {
 
     public State removePotionRecipesByIngredient(String name) {
         this.existingPotion.removeRecipesByIngredient(name);
+        return this;
+    }
+
+    public State setPotionEffects(List<PotionEffectSerializable> effects) {
+        this.existingPotion.setEffects(effects);
         return this;
     }
 
@@ -201,6 +229,16 @@ public abstract class State implements Cloneable, Serializable {
 
     public State setInputEffectDuration(int durationTicks) {
         this.input.setEffectDuration(durationTicks);
+        return this;
+    }
+
+    public State setInputEffectType(String effectType) {
+        this.input.setEffectType(effectType);
+        return this;
+    }
+
+    public State setInputIngredient(String ingredient) {
+        this.input.setIngredient(ingredient);
         return this;
     }
 
@@ -344,11 +382,6 @@ public abstract class State implements Cloneable, Serializable {
         return button;
     }
 
-    /**
-     * Fetches all potions to be displayed in the menu: should be equal to the menu's page size.
-     */
-    public abstract List<ItemStack> calculatePotions();
-
     public Map<Integer, ItemStack> calculateButtons() {
         Map<Integer, ItemStack> buttons = new HashMap<>();
         buttons.put(MagicNumber.PREVIOUS_PAGE_SLOT, this.previousPageButton());
@@ -358,6 +391,11 @@ public abstract class State implements Cloneable, Serializable {
         buttons.put(MagicNumber.EXIT_SLOT, this.exitButton());
         return buttons;
     }
+
+    /**
+     * Fetches all potions to be displayed in the menu: should be equal to the menu's page size.
+     */
+    public abstract List<ItemStack> calculateInventoryItems();
 
     public void openInventory(Player player) {
         inv.openInventory(this, player);

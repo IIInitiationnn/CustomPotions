@@ -20,8 +20,8 @@ public class MagicNumber {
     public static final int EXIT_SLOT = 53;
 
     // Chest Confirm Inventory GUI
-    public static final int CONFIRM_POTION_DISPLAY_SLOT = 22;
-    public static final int CONFIRM_EDIT_SLOT = 30;
-    public static final int CONFIRM_CONFIRM_SLOT = 31;
-    public static final int CONFIRM_EXIT_SLOT = 32;
+    public static final int CONFIRM_POTION_DISPLAY_SLOT = 13;
+    public static final int CONFIRM_EDIT_SLOT = 21;
+    public static final int CONFIRM_CONFIRM_SLOT = 22;
+    public static final int CONFIRM_EXIT_SLOT = 23;
 }

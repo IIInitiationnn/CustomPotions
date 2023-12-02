@@ -2,10 +2,13 @@ package xyz.iiinitiationnn.custompotions.states;
 
 import org.bukkit.ChatColor;
 import org.bukkit.inventory.ItemStack;
+import xyz.iiinitiationnn.custompotions.Actions.EnterEffectDurationAction;
 import xyz.iiinitiationnn.custompotions.inventorytypes.AnvilInventory;
+import xyz.iiinitiationnn.custompotions.utils.ItemStackUtil;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 public class EffectDurationMenu extends State {
     public EffectDurationMenu(State state) {
@@ -13,17 +16,27 @@ public class EffectDurationMenu extends State {
     }
 
     @Override
-    protected boolean needsNextPage() {
-        return false; // TODO
-    }
+    public List<ItemStack> calculateInventoryItems() {
+        State nextState = this.clone();
+        nextState.setAction(new EnterEffectDurationAction());
 
-    @Override
-    public Map<Integer, ItemStack> calculateButtons() {
-        return super.calculateButtons(); // TODO
-    }
+        List<String> lore = new ArrayList<>();
+        lore.add("");
+        lore.add(ChatColor.GOLD + "This is your current potion.");
+        if (this.isPotionLingering()) {
+            lore.add(ChatColor.GOLD + "Enter the effect duration in seconds (1 to 26,843,545).");
+        } else {
+            lore.add(ChatColor.GOLD + "Enter the effect duration in seconds (1 to 107,374,182).");
+        }
+        lore.add("");
+        lore.add(ChatColor.GREEN + "Click the output slot to continue.");
+        lore.add(ChatColor.GOLD + "Click the left input slot to skip (e.g. if you have misclicked).");
+        lore.add(ChatColor.RED + "Press ESC to exit without saving.");
 
-    @Override
-    public List<ItemStack> calculatePotions() {
-        return null; // TODO
+        ItemStack potion = nextState.getPotionItemStack();
+        ItemStackUtil.setLocalizedName(potion, nextState.encodeToString());
+        ItemStackUtil.addLore(potion, lore);
+
+        return Collections.singletonList(potion);
     }
 }

@@ -3,15 +3,13 @@ package xyz.iiinitiationnn.custompotions;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.bukkit.Material;
-import org.bukkit.inventory.ItemStack;
-import xyz.iiinitiationnn.custompotions.utils.PotionUtil;
 
 import java.io.Serializable;
 
 public class PotionRecipe implements Serializable {
-    private Material ingredient;
-    private String base; // potion ID
-    private String result; // potion ID
+    private final Material ingredient;
+    private final String base; // potion ID
+    private final String result; // potion ID
 
     public PotionRecipe(Material ingredient, String base, String result) {
         this.ingredient = ingredient;
@@ -19,14 +17,8 @@ public class PotionRecipe implements Serializable {
         this.result = result;
     }
 
-    // Base is vanilla potion
-    public PotionRecipe(Material ingredient, ItemStack base, Potion result) {
-        this(ingredient, PotionUtil.getIdFromVanillaPotion(base), result.getPotionId());
-    }
-
-    // Base is custom potion
-    public PotionRecipe(Material ingredient, Potion base, Potion result) {
-        this(ingredient, base.getPotionId(), result.getPotionId());
+    public PotionRecipe(Material ingredient, String base, Potion result) {
+        this(ingredient, base, result.getPotionId());
     }
 
     public Material getIngredient() {
@@ -39,18 +31,6 @@ public class PotionRecipe implements Serializable {
 
     public String getResult() {
         return this.result;
-    }
-
-    public void setIngredient(Material ingredient) {
-        this.ingredient = ingredient;
-    }
-
-    public void setBase(String base) {
-        this.base = base;
-    }
-
-    public void setResult(String result) {
-        this.result = result;
     }
 
     public boolean conflictsWith(PotionRecipe potionRecipe) {

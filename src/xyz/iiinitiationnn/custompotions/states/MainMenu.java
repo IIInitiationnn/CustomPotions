@@ -68,12 +68,21 @@ public class MainMenu extends State {
         return potion;
     }
 
+    @Override
+    public Map<Integer, ItemStack> calculateButtons() {
+        Map<Integer, ItemStack> buttons = new HashMap<>();
+        buttons.put(MagicNumber.PREVIOUS_PAGE_SLOT, this.previousPageButton());
+        buttons.put(MagicNumber.NEXT_PAGE_SLOT, this.nextPageButton());
+        buttons.put(MagicNumber.EXIT_SLOT, this.exitButton());
+        return buttons;
+    }
+
     /**
      * Fetches the potions for the main menu including, if applicable:
      * a (random) new potion, and all existing potions.
      */
     @Override
-    public List<ItemStack> calculatePotions() {
+    public List<ItemStack> calculateInventoryItems() {
         State nextStateTemplate = this.clone();
         nextStateTemplate.setAction(new SelectPotionAction());
 
@@ -108,14 +117,5 @@ public class MainMenu extends State {
             i++;
         }
         return allPotions;
-    }
-
-    @Override
-    public Map<Integer, ItemStack> calculateButtons() {
-        Map<Integer, ItemStack> buttons = new HashMap<>();
-        buttons.put(MagicNumber.PREVIOUS_PAGE_SLOT, this.previousPageButton());
-        buttons.put(MagicNumber.NEXT_PAGE_SLOT, this.nextPageButton());
-        buttons.put(MagicNumber.EXIT_SLOT, this.exitButton());
-        return buttons;
     }
 }

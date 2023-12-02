@@ -25,12 +25,11 @@ public class ChestInventory extends InventoryType<Inventory> {
         }
 
         // Add potions
-        for (ItemStack potion: state.calculatePotions()) {
+        for (ItemStack potion: state.calculateInventoryItems()) {
             inv.addItem(potion);
         }
 
         return inv;
-
     }
 
     @Override

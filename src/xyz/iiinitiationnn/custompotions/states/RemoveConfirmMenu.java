@@ -19,7 +19,7 @@ public class RemoveConfirmMenu extends State {
     }
 
     @Override
-    public List<ItemStack> calculatePotions() {
+    public List<ItemStack> calculateInventoryItems() {
         return null; // TODO
     }
 }

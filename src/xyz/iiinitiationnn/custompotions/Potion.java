@@ -74,6 +74,10 @@ public class Potion implements Serializable, Cloneable {
         return this.effects;
     }
 
+    public ChatColor getCorrespondingChatColor() {
+        return ColourUtil.getChatColor(this.colour);
+    }
+
     public ItemStack toItemStack() {
         ItemStack potion = new ItemStack(this.type);
         PotionUtil.setColor(potion, this.colour);
